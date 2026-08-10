@@ -86,7 +86,7 @@ deletar o perfil técnico de um usuário (`owner`), persistido em PostgreSQL.
 |---|---|
 | Criar perfil | Recebe `owner` + dados do perfil. Se já existe perfil para esse `owner`, a operação é **bloqueada com erro** (não sobrescreve). Se não existe, cria e persiste. |
 | Consultar perfil | Recebe `owner`, retorna o perfil estruturado completo (skills, histórico, bio). Se não existe perfil para o `owner`, retorna erro de não encontrado. |
-| Atualizar perfil | Recebe `owner` + dados atualizados, substitui os dados do perfil existente. Se não existe perfil para o `owner`, retorna erro de não encontrado (não cria implicitamente). |
+| Atualizar perfil | Recebe `owner` + apenas os campos que devem ser alterados (atualização parcial). Campos não enviados permanecem inalterados. Se não existe perfil para o `owner`, retorna erro de não encontrado (não cria implicitamente). |
 | Deletar perfil | Recebe `owner`, remove o perfil correspondente. Se não existe, retorna erro de não encontrado. |
 
 **Tratamento de erro:**
