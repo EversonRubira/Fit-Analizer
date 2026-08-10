@@ -167,6 +167,6 @@ graph LR
 - **A própria feature de Fit Matching** (comparação vaga x perfil via
   Claude API) — é a consumidora deste dado, mas sua especificação é objeto
   de um PRD futuro, não deste documento.
-- **Histórico de alterações / versionamento do perfil** — atualizações
-  substituem o estado atual; não há trilha de auditoria ou versões
-  anteriores armazenadas.
+- **Histórico de alterações / versionamento do perfil** — cada atualização
+  sobrescreve o valor anterior dos campos alterados; não há trilha de
+  auditoria, log de mudanças ou versões anteriores armazenadas.
