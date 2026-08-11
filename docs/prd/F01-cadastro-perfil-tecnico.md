@@ -170,3 +170,29 @@ graph LR
 - **Histórico de alterações / versionamento do perfil** — cada atualização
   sobrescreve o valor anterior dos campos alterados; não há trilha de
   auditoria, log de mudanças ou versões anteriores armazenadas.
+
+## 10. Considerações de segurança
+
+**Risco aceito — IDOR (Insecure Direct Object Reference):** como o
+identificador `owner` não está associado a nenhum mecanismo de
+autenticação, qualquer requisição que souber (ou adivinhar) o valor de
+`owner` de outra pessoa consegue consultar, atualizar ou deletar aquele
+perfil. Este é um risco real de IDOR, aceito conscientemente nesta versão
+porque:
+
+- O uso é estritamente privado, entre duas pessoas (autor e sua esposa).
+- A API não é, e não deve ser, exposta publicamente na internet sem
+  autenticação real.
+
+**Implicação para deploys futuros:** caso a API venha a ser exposta fora
+de um ambiente local/privado (ex: deploy em nuvem acessível publicamente,
+mesmo que temporário para testes), este risco deixa de ser aceitável e a
+autenticação real (hoje fora de escopo, ver seção 9) passa a ser
+pré-requisito, não opcional.
+
+**Chaves de API e segredos:** quando a integração com a Claude API for
+implementada (feature futura de Fit Matching), a chave de API deve ser
+lida exclusivamente de variável de ambiente no back-end, nunca
+hardcoded no código-fonte nem commitada no repositório. O `.gitignore`
+do projeto já está configurado para excluir arquivos `.env` e
+`application-local.*`.
