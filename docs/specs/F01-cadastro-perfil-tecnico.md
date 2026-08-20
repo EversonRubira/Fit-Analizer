@@ -4,57 +4,51 @@
 **Status:** Rascunho para implementação
 **Data:** 2026-08-14
 
-## 1. Arquitetura da Feature
+## 1. Arquitetura
 
-### 1.1 Camadas e responsabilidades
+### 1.1 Estilo arquitetural
 
-| Camada | Faz | Não faz |
-|---|---|---|
-| **Controller** (`ProfileController`) | Recebe a requisição HTTP, desserializa o corpo no DTO correspondente, delega ao Service, devolve o DTO de resposta com o status HTTP de sucesso. | Não contém regra de negócio (ex: não decide se um `owner` já existe). Não acessa `Repository`/`Entity` diretamente. Não decide status de erro — isso é responsabilidade do exception handler global (seção 1.3). |
-| **DTOs** (`ProfileCreateRequest`, `ProfileUpdateRequest`, `ProfileResponse`) | Definem o contrato de entrada/saída da API. Carregam anotações de validação de formato (Bean Validation: ex. `@NotBlank` em `owner` na criação). `ProfileUpdateRequest` tem todos os campos opcionais (nulos = "não alterar"), refletindo a atualização parcial definida no PRD. | Não contêm lógica de negócio. Não são a mesma classe que a `Entity` — não há mapeamento automático de DTO para tabela. |
-| **Service** (`ProfileService`) | Contém toda a regra de negócio: bloquear criação duplicada, aplicar merge parcial na atualização (só sobrescreve campos não nulos do DTO), lançar erro de não encontrado. Orquestra chamadas ao `Repository`. | Não conhece HTTP — não recebe `HttpServletRequest`, não devolve `ResponseEntity`, não lança `HttpStatus`. Lança exceções de domínio (`ProfileAlreadyExistsException`, `ProfileNotFoundException`), que são mapeadas para status HTTP em outra camada. |
-| **Repository** (`ProfileRepository`, interface Spring Data JPA) | Acesso a dados: `findByOwner`, `existsByOwner`, `save`, `deleteByOwner`. | Não contém regra de negócio. Não decide se um "não encontrado" é um erro — apenas retorna `Optional.empty()`/`false`; quem decide o que fazer com isso é o `Service`. |
-| **Entity** (`ProfileEntity`) | Mapeamento JPA da tabela `profile` no PostgreSQL (campos `owner`, `bio`, `skills`, `historicoProfissional`). | Sem lógica de negócio além de getters/setters e equals/hashCode. Não é exposta diretamente na API (nunca é o tipo de retorno de um endpoint). |
-| **Exception Handler** (`@RestControllerAdvice`) | Único lugar que traduz exceções (de validação, de domínio, de persistência ou não mapeadas) em respostas HTTP com status e corpo de erro padronizados. | Não contém regra de negócio — só faz o mapeamento exceção → resposta HTTP. |
+Arquitetura em camadas simples (Controller → Service → Repository), adaptação do padrão MVC para uma API REST. Não é Clean Architecture nem Hexagonal.
 
-### 1.2 Fluxo de uma requisição típica (`PATCH /profiles/{owner}`)
+**Justificativa (princípio Hashimoto):** o domínio da F01 é um CRUD de perfil técnico, sem múltiplas implementações concorrentes de nada e sem indicação real de troca de infraestrutura (ex: banco de dados). Introduzir portas/adapters agora pagaria o custo de indireção sem resolver nenhuma fricção existente. A única troca de fornecedor plausível no roadmap do projeto (Claude API → outro provedor de IA) pertence à futura feature de análise de fit, não à F01, e será isolada via interface (`FitAnalysisClient`) apenas quando essa feature for especificada.
 
-1. **Controller** recebe o `PATCH`, desserializa o corpo em `ProfileUpdateRequest` (campos opcionais).
-2. **Bean Validation** roda antes do método do Controller (via `@Valid`), checando formato dos campos presentes (ex: se `skills` foi enviado, cada item precisa ter `nome` não vazio e `anosExperiencia >= 0`). Se falhar, lança `MethodArgumentNotValidException` — a requisição nunca chega ao Service.
-3. **Controller** chama `profileService.update(owner, request)`.
-4. **Service** busca a entidade via `profileRepository.findByOwner(owner)`. Se vazio, lança `ProfileNotFoundException`.
-5. **Service** aplica o merge parcial: para cada campo do DTO que não é nulo, sobrescreve o campo correspondente na entidade; campos nulos no DTO mantêm o valor atual da entidade.
-6. **Service** chama `profileRepository.save(entity)` — o Hibernate emite o `UPDATE` no PostgreSQL.
-7. **Service** retorna a entidade atualizada ao Controller.
-8. **Controller** converte a entidade em `ProfileResponse` e devolve `200 OK`.
+Se surgir necessidade real de múltiplas implementações de uma mesma responsabilidade, esse é o gatilho para reavaliar o estilo arquitetural — não antes disso.
 
-Se qualquer exceção for lançada nos passos 2, 4 ou 6, o fluxo normal é interrompido e cai no exception handler (seção 1.3) — o Controller não trata erro em nenhum ponto desse fluxo.
+### 1.2 Responsabilidade por camada
 
-### 1.3 Onde cada erro é tratado
+**Controller**
+- Recebe a requisição HTTP e valida formato/sintaxe via Bean Validation nos DTOs (`@NotNull`, `@Size`, etc.).
+- Converte DTO de entrada → chamada ao Service.
+- Converte retorno do Service → DTO de resposta.
+- Captura exceções de negócio lançadas pelo Service via try-catch por endpoint e traduz para o status HTTP correspondente (ex: `ProfileAlreadyExistsException` → 409, `ProfileNotFoundException` → 404).
+- Não contém regra de negócio.
 
-| Tipo de erro | Onde é detectado | Onde é tratado/mapeado | Status HTTP |
-|---|---|---|---|
-| Validação de entrada (formato: campo obrigatório ausente, tipo inválido, valor fora de faixa) | Bean Validation, disparada a partir do DTO anotado (`@Valid` no Controller) | `@ExceptionHandler(MethodArgumentNotValidException.class)` no `@RestControllerAdvice` | 400 |
-| Regra de negócio: criar perfil para `owner` que já existe | `ProfileService.create` | `@ExceptionHandler(ProfileAlreadyExistsException.class)` no `@RestControllerAdvice` | 409 |
-| Regra de negócio: consultar/atualizar/deletar `owner` inexistente | `ProfileService.get` / `update` / `delete` | `@ExceptionHandler(ProfileNotFoundException.class)` no `@RestControllerAdvice` | 404 |
-| Erro de persistência (falha de conexão com PostgreSQL, violação de constraint no banco) | `ProfileRepository` / Hibernate, propaga como `DataAccessException` | `@ExceptionHandler(DataAccessException.class)` no `@RestControllerAdvice`, logado com stack trace | 500 |
-| Erro não mapeado (bug, `NullPointerException`, etc.) | Qualquer camada | `@ExceptionHandler(Exception.class)` (catch-all) no `@RestControllerAdvice`, logado com stack trace completo | 500 |
+**Decisão registrada:** optou-se por try-catch por endpoint em vez de `@ControllerAdvice` global, priorizando visibilidade total do fluxo de erro em cada método durante a fase de aprendizado. **Gatilho de revisão:** se o número de endpoints crescer e o padrão de tratamento começar a se repetir de forma relevante entre eles, migrar para `@ControllerAdvice` centralizado.
 
-**Regra prática para debugar em produção:** ao ver uma exceção,
-- se é `MethodArgumentNotValidException` → o problema é de contrato/formato, olhar o DTO e a requisição recebida;
-- se é uma exceção de domínio nomeada (`ProfileNotFoundException`, `ProfileAlreadyExistsException`) → o problema é de regra de negócio, olhar o `ProfileService`;
-- se é `DataAccessException` (ou subclasse) → o problema é de persistência/banco, olhar `ProfileRepository`, conexão com PostgreSQL, ou constraints da tabela;
-- qualquer outra exceção → é um bug não previsto, olhar o stack trace completo para achar a camada de origem.
+**Service**
+- Contém toda a regra de negócio da feature.
+- Aplica a regra de unicidade "um perfil por owner": verifica via `findByOwner` antes de persistir e lança `ProfileAlreadyExistsException` se já existir.
+- Aplica a semântica de PATCH: para cada campo não-nulo no DTO de atualização, sobrescreve o campo correspondente na entidade; campos nulos são ignorados (mantêm o valor atual).
+- Delimita a fronteira transacional (`@Transactional`).
+- Busca explicitamente qualquer dado relacionado necessário antes de retornar (reforçado por `open-in-view: false`, já configurado no Bloco 0).
 
-### 1.4 Justificativa arquitetural
+**Repository**
+- Interface Spring Data JPA, sem lógica além de queries derivadas (ex: `findByOwner`).
+- Constraint `UNIQUE` declarada no schema (via entidade/migration) sobre a coluna `owner`, como rede de segurança contra concorrência.
 
-A arquitetura é deliberadamente simples: `Controller → Service → Repository/Entity`, com DTOs no limite da API e um exception handler global. Isso é proporcional ao escopo do F01 porque:
+### 1.3 Regra de negócio: unicidade de perfil por owner (409)
 
-- **Uma única entidade, sem relacionamentos complexos.** O perfil técnico é uma entidade isolada (`skills` e `historicoProfissional` são listas embutidas, não entidades relacionadas com ciclo de vida próprio). Não há agregados com invariantes cruzando múltiplas entidades que justifiquem DDD tático (Aggregates, Value Objects, Domain Events).
-- **Um único mecanismo de persistência, sem necessidade de trocar implementação.** O PRD fixa PostgreSQL via JPA/Hibernate como decisão já tomada, reaproveitando stack conhecida — não há requisito de suportar múltiplos bancos ou fontes de dados simultâneas.
-- **Um único adapter de entrada.** Só existe REST API (PRD, seção 9: sem UI em v1). Não há necessidade de abstrair a entrada por trás de uma porta para suportar múltiplos protocolos (REST + gRPC + CLI, por exemplo).
-- **Regra de negócio simples e já enumerável.** As únicas regras são: unicidade de perfil por `owner`, atualização parcial, e "não encontrado" para operações sobre `owner` inexistente — cabem confortavelmente numa única classe de serviço, sem necessidade de separar em múltiplos casos de uso/handlers.
+Abordagem de defesa em profundidade, com dois mecanismos independentes:
 
-Introduzir arquitetura hexagonal (ports & adapters) ou DDD tático agora adicionaria camadas de indireção (interfaces de porta, mappers extras entre domínio e persistência) sem nenhum problema real que resolvam hoje. Seguindo o princípio Hashimoto — complexidade se adiciona quando há fricção observada, não antecipada — essa estrutura em camadas simples é o ponto de partida certo, e deve ser revisitada apenas se/quando a fricção aparecer de fato.
+1. **Service** — verificação explícita (`findByOwner`) antes do `save`, lançando `ProfileAlreadyExistsException` de forma legível e testável. Cobre o caso comum.
+2. **Banco** — constraint `UNIQUE` na coluna `owner`. Cobre o caso raro de duas requisições concorrentes passarem pela verificação do Service antes de qualquer uma persistir (race condition / TOCTOU). Nesse caso, a segunda operação falha na camada de persistência com `DataIntegrityViolationException`, capturada no Controller e traduzida para 409 — mesmo tratamento e mesmo status HTTP que o caminho do Service, do ponto de vista do cliente da API.
 
-**Observação (não implementar agora):** o PRD (seção 8, Consumes/Provides) já prevê que a futura feature de Fit Matching (F02) consumirá o perfil estruturado produzido aqui. Se essa integração futura exigir múltiplas fontes de perfil, cache, ou desacoplar o consumidor da persistência concreta, pode fazer sentido introduzir uma interface de porta explícita para o acesso ao perfil naquele momento. Hoje, a interface `ProfileRepository` do Spring Data JPA já cumpre esse papel de abstração mínima — não há necessidade de camada adicional.
+**Nota sobre o risco aceito:** mesmo em uso individual (um único usuário), a race condition não é eliminada — depende de requisições concorrentes ao mesmo recurso, não do número de usuários do sistema (ex: duplo clique, retry automático de cliente, testes manuais paralelos). A constraint no banco existe justamente para cobrir esse cenário de forma garantida, independente da camada de aplicação.
+
+### 1.4 PATCH — atualização parcial
+
+DTO de atualização (`ProfileUpdateDTO`) com todos os campos opcionais. Regra: campo `null` no JSON de entrada significa "não alterar"; campo presente com valor sobrescreve o valor atual na entidade. Implementação direta via Jackson, sem necessidade de JSON Patch (RFC 6902) — não há requisito atual de distinguir "campo omitido" de "campo enviado como null", o que tornaria RFC 6902 uma complexidade desproporcional ao problema.
+
+### 1.5 Rastreabilidade de erro
+
+Toda exceção de negócio lançada pelo Service é uma classe própria e nomeada (ex: `ProfileAlreadyExistsException`, `ProfileNotFoundException`), nunca exceção genérica. Isso garante que o try-catch no Controller mapeie por tipo, não por inferência de mensagem, e que qualquer novo erro futuro seja explícito no código antes de acontecer em produção.
