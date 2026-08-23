@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: fit-analizer
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fit_analizer}
+    username: ${DB_USER:fit_analizer}
+    password: ${DB_PASSWORD:fit_analizer}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
