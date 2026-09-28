@@ -48,6 +48,18 @@ Achados da validação:
 Service ou validação de DTO? Hoje o schema permite duplicata, porque
 `profile_skills` não tem PK nem UNIQUE.
 
+**Necessidade real identificada (motivação pro Bloco 2/3):** sem
+Repository/Service/Controller, não existe nenhum caminho pra atualizar o
+Profile — hoje, terminar um curso e querer registrar a skill nova só seria
+possível com SQL direto no banco, sem passar por nenhuma validação. Isso é
+fricção real, não hipotética, então reforça a ordem já planejada (Bloco 2/3
+é o próximo passo). Traz também uma pergunta de design pro Bloco 3: a decisão
+de PATCH já fechada ("DTO com campos opcionais, `null` = não altera") cobre
+bem campos escalares (`bio`), mas `skills` e `historicoProfissional` são
+listas — adicionar uma skill não é "alterar um campo", é inserir um item.
+Decidir no Bloco 3 se o PATCH aceita adicionar/remover um item da lista, ou
+se atualização de skills usa endpoint próprio (ex.: `POST /profiles/{owner}/skills`).
+
 **Changelog do Bloco 1**
 - 2026-09-28: constraint UNIQUE de `profiles.owner` ganhou nome fixo
   `uk_profiles_owner`, via `@UniqueConstraint` no `@Table` de `Profile` (antes
