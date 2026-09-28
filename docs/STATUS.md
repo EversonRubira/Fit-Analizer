@@ -144,6 +144,14 @@ que buscar, consulta APIs públicas de emprego e envia cada vaga para a F02.
 **Fontes levantadas** (só pela documentação, ainda não testadas):
 - Começar com: ITJobs.pt (exige chave grátis por e-mail), Jobicy, Remotive.
 - Avaliar depois: Himalayas, freehire.me, Arbeitnow, RemoteOK.
+- **BEP — Bolsa de Emprego Público** (`https://www.bep.gov.pt/Default.aspx`):
+  vagas da Administração Pública portuguesa. **Verificar antes de implementar:**
+  não encontrei API pública documentada, só formulário de busca em HTML — o
+  que quebraria o padrão "todas com API pública real, sem scraping" das
+  outras fontes. Existiu um projeto de dados abertos de terceiros
+  (`empregopublico.github.io`) que fazia esse scraping, mas está
+  descontinuado. Confirmar se há webservice/API oficial antes de decidir
+  entrar como fonte.
 
 ## Ambiente
 
