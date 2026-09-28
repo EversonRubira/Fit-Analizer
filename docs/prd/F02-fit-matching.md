@@ -78,13 +78,17 @@ Delegar a análise inteira a um LLM cria outros problemas:
 | Resultado reprodutível a partir da resposta do LLM | Dada a mesma lista de requisitos classificados, `aderenciaPct` e `decisao` são sempre os mesmos (cálculo 100% em código, coberto por testes unitários) |
 | Casos duvidosos ficam visíveis | Todo resultado em zona de fronteira, com rebaixamento por alucinação ou inconclusivo é persistido com `revisar = true` |
 
-**Assumption:** "discordar" no conjunto de regressão significa a `decisao`
-produzida ser diferente da decisão que o usuário atribuiu à vaga (e não
-diferença pontual de percentual).
+**Definição de discordância:** no conjunto de regressão, "discordar" significa
+a `decisao` produzida ser diferente da decisão que o usuário atribuiu à vaga
+(não diferença pontual de percentual). Para cada vaga, o conjunto registra
+também a **distância em faixas** entre a decisão da Claude e a do usuário
+(ex: `cv_carta` vs. `cv_carta_com_aviso` = 1 faixa; `cv_prioritario` vs.
+`nao_candidatar` = 3 faixas), para diferenciar erro de fronteira de erro
+grosseiro.
 
-**Assumption:** a proporção de resultados com `revisar = true` que dispara a
-fase 2 (ver seção 9) não foi quantificada; valor inicial sugerido de **30%**
-dos resultados, a calibrar com o uso real.
+**Proporção de `revisar`:** o gatilho da fase 2 (ver seção 9) começa em
+**30%** dos resultados com `revisar = true`, valor de partida a calibrar com o
+uso real.
 
 ## 6. Features
 
@@ -221,6 +225,11 @@ persiste como `nenhum`, sem a referência rejeitada.
   83–87**;
 - algum requisito foi **rebaixado** por evidência inexistente no Profile;
 - a análise é **inconclusiva** (seção 6.7).
+
+O log registra a **causa** de cada `revisar = true` (fronteira, evidência
+rebaixada ou inconclusiva; mais de uma quando coincidirem), para que a
+proporção de revisões possa ser analisada por motivo ao calibrar o gatilho
+da fase 2.
 
 #### 6.7 Vaga sem requisitos obrigatórios / texto que não é vaga
 
@@ -364,10 +373,11 @@ Spec.
 - **Para o coletor:** o `MatchResult` como resposta HTTP do mesmo endpoint,
   idempotente para a mesma vaga.
 
-**Nota de integração com a F01:** como `MatchResult` tem `@ManyToOne` para
-`Profile`, deletar um Profile na F01 precisa considerar os `MatchResult`
-associados. **Assumption:** o comportamento (cascade na exclusão ou bloqueio)
-é decidido na Spec da F02; hoje a F01 não conhece `MatchResult`.
+**Nota de integração com a F01:** excluir um Profile na F01 **apaga junto os
+`MatchResult` associados** — são dado derivado e recalculável. A F01 **não
+passa a conhecer** o `MatchResult`: a dependência continua em um único
+sentido (F02 → F01). O mecanismo (cascata no banco, declarada do lado da
+F02) fica para a Spec.
 
 ```mermaid
 graph LR
@@ -393,8 +403,8 @@ graph LR
   **fase 2**, com gatilho:
   - a Claude discordar do usuário em **mais de 3 de 15** vagas do conjunto de
     teste julgado à mão; **ou**
-  - a proporção de resultados com `revisar = true` for grande (ver Assumption
-    na seção 5).
+  - a proporção de resultados com `revisar = true` passar de **30%** (ponto de
+    partida, a calibrar; ver seção 5).
 - **Consulta e ranking de resultados** — F03.
 - **O coletor** — projeto separado; aqui aparece apenas como cliente HTTP.
 - **Persistir o texto da vaga** no `MatchResult` — apenas o hash, quando usado
