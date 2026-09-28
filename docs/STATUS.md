@@ -43,22 +43,27 @@ Achados da validação:
   preciso recriar o banco. Mudanças de constraint em banco com dados reais vão
   exigir migração manual (ou ferramenta de migração).
 
-**Pergunta em aberto (calibrar no início do Bloco 2):** skills duplicadas
-(mesmo `nome` no mesmo perfil) devem ser bloqueadas? Se sim, em qual camada,
-Service ou validação de DTO? Hoje o schema permite duplicata, porque
-`profile_skills` não tem PK nem UNIQUE.
-
-**Necessidade real identificada (motivação pro Bloco 2/3):** sem
-Repository/Service/Controller, não existe nenhum caminho pra atualizar o
-Profile — hoje, terminar um curso e querer registrar a skill nova só seria
-possível com SQL direto no banco, sem passar por nenhuma validação. Isso é
-fricção real, não hipotética, então reforça a ordem já planejada (Bloco 2/3
-é o próximo passo). Traz também uma pergunta de design pro Bloco 3: a decisão
-de PATCH já fechada ("DTO com campos opcionais, `null` = não altera") cobre
-bem campos escalares (`bio`), mas `skills` e `historicoProfissional` são
-listas — adicionar uma skill não é "alterar um campo", é inserir um item.
-Decidir no Bloco 3 se o PATCH aceita adicionar/remover um item da lista, ou
-se atualização de skills usa endpoint próprio (ex.: `POST /profiles/{owner}/skills`).
+**Skills duplicadas e inclusão de skill nova: decidido.** As duas perguntas
+em aberto (bloquear duplicata? PATCH ou endpoint próprio?) se resolvem
+juntas:
+- `skills` ganha um endpoint de coleção próprio no Bloco 3:
+  `POST /profiles/{owner}/skills` (adicionar uma skill) e
+  `DELETE /profiles/{owner}/skills/{nome}` (remover). O PATCH geral do
+  Profile continua só para campos escalares (`bio`).
+- Motivo: o caso de uso real é "adicionar uma skill", não "reenviar o
+  perfil inteiro". Com endpoint próprio, o client manda só
+  `{nome, anosExperiencia}`, e o Service não precisa comparar lista contra
+  lista para achar duplicata.
+- Skill duplicada (mesmo `nome` já existente no Profile) é rejeitada com 409
+  no `POST` — mesmo padrão de erro já usado para `owner` duplicado na F01.
+  Verificação no Service, iterando `profile.getSkills()`; não depende de
+  constraint no banco, porque `profile_skills` não tem PK própria para
+  sustentar um UNIQUE composto sem alterar o schema.
+- Nível de proficiência (iniciante/avançado etc.) como alternativa a
+  `anosExperiencia` foi cogitado e descartado por ora: o valor numérico é
+  mais comparável contra o texto da vaga (F02) e menos sujeito a
+  autoavaliação subjetiva, que é o tipo de dado mole que a checagem de
+  alucinação da F02 existe para não deixar passar sem crítica.
 
 **Changelog do Bloco 1**
 - 2026-09-28: constraint UNIQUE de `profiles.owner` ganhou nome fixo
