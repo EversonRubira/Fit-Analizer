@@ -12,18 +12,19 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "profiles")
+@Table(name = "profiles", uniqueConstraints = @UniqueConstraint(name = "uk_profiles_owner", columnNames = "owner"))
 public class Profile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "owner", nullable = false, unique = true)
+    @Column(name = "owner", nullable = false)
     private String owner;
 
     @Column(name = "bio", length = 2000)
