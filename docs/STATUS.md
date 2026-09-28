@@ -102,22 +102,27 @@ do texto normalizado), `vagaUrl` em coluna própria, UNIQUE
 - Excluir um Profile apaga os `MatchResult` (cascata declarada do lado da F02).
 
 **Decisões a confirmar na Spec**
-- **Mecanismo da cascata Profile → `MatchResult`.** Proposta registrada: fazer
-  no nível de aplicação, como a F01 faz com seus filhos, em vez de
-  `ON DELETE CASCADE` no banco. **Conflito a resolver:** a cascata do Hibernate
-  só funciona a partir de um mapeamento no lado pai (`@OneToMany` com
-  `cascade` em `Profile`, como a F01 faz com `historicoProfissional`). Com
-  apenas `@ManyToOne` em `MatchResult` e sem lista em `Profile`,
-  `repository.delete(profile)` não apaga os `MatchResult` e falha na FK.
-  Opções:
-  (a) `@OnDelete(action = CASCADE)` no `@ManyToOne` de `MatchResult`, que
-  gera `ON DELETE CASCADE` no banco, declarado do lado da F02, sem a F01
-  conhecer o `MatchResult`;
-  (b) adicionar `@OneToMany(cascade, orphanRemoval)` de `MatchResult` em
-  `Profile`, o que acopla a F01 à F02;
-  (c) o delete de Profile apaga os `MatchResult` explicitamente antes, o que
-  também faz a F01 depender da F02.
-  Só a (a) preserva a regra "a F01 não conhece o `MatchResult`".
+- **Mecanismo da cascata Profile → `MatchResult`: decidido (delete explícito
+  no Service da F02).** A cascata do Hibernate só funciona a partir de um
+  mapeamento no lado pai (`@OneToMany` com `cascade` em `Profile`, como a F01
+  faz com `historicoProfissional`). Com apenas `@ManyToOne` em `MatchResult`
+  e sem lista em `Profile`, esse padrão não se transfere:
+  `repository.delete(profile)` não apagaria os `MatchResult` e falharia na
+  FK. Opções avaliadas:
+  (a) `@OnDelete(action = CASCADE)` no `@ManyToOne` de `MatchResult` — gera
+  `ON DELETE CASCADE` no banco; garantia mais forte (funciona por qualquer
+  caminho de delete), mas quebra a convenção do projeto de cascata só via
+  Hibernate, e o comportamento só aparece no schema, não na classe Java;
+  (b) `@OneToMany(cascade, orphanRemoval)` de `MatchResult` dentro de
+  `Profile` — mantém o padrão do Hibernate, mas acopla a entidade `Profile`
+  ao conceito de `MatchResult`, revertendo a regra de isolamento da F01;
+  (c) **[escolhida]** o Service da F02 apaga os `MatchResult` do owner antes
+  de deletar o Profile. Sem mudança de schema e sem acoplar a entidade
+  `Profile` — ela continua sem saber que `MatchResult` existe. O custo é
+  disciplina: só funciona se todo caminho que deleta um Profile passar por
+  esse Service; um endpoint admin ou script futuro que apague Profile direto
+  deixaria `MatchResult` órfãos. Anotar isso como responsabilidade do Service
+  na Spec da F02, e revisitar se surgir outro caminho de delete de Profile.
 
 **Fora do escopo do v1:** segunda camada de LLM como revisor (gatilho: mais de
 3 discordâncias em 15 vagas de teste, ou `revisar` acima de ~30%), F03, guardar
