@@ -6,7 +6,7 @@
 
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
-| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0 e 1 na main, schema validado; Bloco 2 mergeado e testado (`mvn test` local, 6/6); `Frente` implementada em `Skill`/`ExperienciaProfissional` (não testada localmente); Bloco 3 não iniciado |
+| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0 e 1 na main, schema validado; Bloco 2 mergeado e testado; `Frente` em `Skill`/`ExperienciaProfissional` mergeada e testada (`mvn test` local, sem problemas); Bloco 3 não iniciado |
 | F02 — Fit Matching | Concluído | Não iniciada | Não iniciada |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
@@ -73,13 +73,12 @@ comex com skill de tech, e vice-versa.
 - Momento da decisão: nenhum dado real persistido ainda (Bloco 2 recém
   implementado, ainda não mergeado), então é a hora mais barata que existe
   pra mudar o modelo — depois disso vira migração de dado real.
-- **Implementado (2026-09-29):** `Frente.java` criado; `Skill` e
-  `ExperienciaProfissional` ganharam o campo `frente` (`@Enumerated(STRING)`,
-  `nullable = false`), constutores e getters/setters atualizados.
-  `ProfileService.adicionarSkill` passou a exigir `Frente frente` como 4º
-  parâmetro. **Não compilado neste ambiente** (mesma limitação de proxy do
-  Bloco 2 — Maven Central bloqueado no sandbox da sessão); rodar `mvn test`
-  localmente antes de mergear.
+- **Implementado e mergeado (2026-09-29, PR #11).** `Frente.java` criado;
+  `Skill` e `ExperienciaProfissional` ganharam o campo `frente`
+  (`@Enumerated(STRING)`, `nullable = false`), construtores e
+  getters/setters atualizados. `ProfileService.adicionarSkill` passou a
+  exigir `Frente frente` como 4º parâmetro. `mvn test` local rodado pelo
+  Everson, sem problemas.
 - **Duas decisões de implementação tomadas sem confirmação prévia do
   usuário** (sinalizadas aqui em vez de travar a implementação, mas a
   confirmar):
@@ -321,8 +320,7 @@ JDK 21 instalado e alinhado com o `pom.xml`.
 2. ~~Bloco 2 (Repository/Service) e decisões de skill duplicada/remoção.~~
    Mergeado, `mvn test` local rodado (6/6, via Codespaces).
 3. ~~Adicionar `Frente.java` e o campo `frente` em `Skill` e
-   `ExperienciaProfissional`.~~ Implementado nesta sessão, PR aberto,
-   aguardando `mvn test` local e merge.
+   `ExperienciaProfissional`.~~ Mergeado (PR #11), `mvn test` local ok.
 4. F01 — Bloco 3 (Controller/DTOs), já contemplando `frente`.
 5. Spec da F02, já contemplando o parâmetro `frente` e a checagem cruzada.
 6. PRD do coletor e da F03.
