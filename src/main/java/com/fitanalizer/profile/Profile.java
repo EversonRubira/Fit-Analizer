@@ -75,6 +75,14 @@ public class Profile {
         }
     }
 
+    public void addSkill(Skill skill) {
+        this.skills.add(skill);
+    }
+
+    public void removeSkill(Skill skill) {
+        this.skills.remove(skill);
+    }
+
     public List<ExperienciaProfissional> getHistoricoProfissional() {
         return historicoProfissional;
     }

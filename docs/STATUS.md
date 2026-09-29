@@ -6,7 +6,7 @@
 
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
-| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0 e 1 na main, schema validado; Blocos 2 e 3 não iniciados |
+| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0 e 1 na main, schema validado; Bloco 2 implementado (não testado localmente); Bloco 3 não iniciado |
 | F02 — Fit Matching | Concluído | Não iniciada | Não iniciada |
 | F03 — Ranking | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -17,7 +17,11 @@ Documentos: `docs/prd/F01-cadastro-perfil-tecnico.md`, `docs/specs/F01-cadastro-
 
 **Andamento**
 - Bloco 0 (setup) e Bloco 1 (entidades JPA): concluídos e mergeados na main.
-- Bloco 2 (Repository/Service): não iniciado.
+- Bloco 2 (Repository/Service): implementado conforme o desenho abaixo.
+  **Não compilado nem testado neste ambiente** — o sandbox da sessão não
+  alcança o Maven Central (só PyPI/npm/etc. liberados no proxy), diferente
+  da validação de schema (que rodou Postgres local dentro do container).
+  Rodar `mvn test` localmente antes de mergear.
 - Bloco 3 (Controller/DTOs): não iniciado.
 
 **Validação de schema (pendência antes do Bloco 2): resolvida.** Feita com
@@ -70,6 +74,19 @@ juntas:
   por substring ou relação semântica entre skills.
 - `DELETE .../skills/{nome}` de skill inexistente: 404
   (`SkillNotFoundException`), simétrico ao resto do Service.
+
+**Implementado**: `ProfileRepository`, `ProfileService`, as 4 exceções, e
+`Profile.addSkill`/`removeSkill` + `Skill.temNome` (auxiliares que faltavam
+nas entidades do Bloco 1). Testes unitários do Service com Mockito em
+`ProfileServiceTest` (duplicata, not-found, remoção, case-insensitive) —
+não executados neste ambiente (ver nota acima).
+
+**Lacuna conhecida:** `adicionarSkill` chama `nome.trim()` sem checar
+`null` antes — `nome = null` estoura `NullPointerException` cru, não um
+erro tratado. Deixado assim de propósito: validação de entrada
+(`@NotBlank` etc.) é responsabilidade do DTO no Bloco 3, que ainda não
+existe. Enquanto isso, chamar o Service direto (fora de um Controller com
+DTO validado) com `nome` nulo quebra sem mensagem clara.
 
 **Desenho do Bloco 2 (Repository/Service), antes de codar**
 - `ProfileRepository extends JpaRepository<Profile, Long>`: só
