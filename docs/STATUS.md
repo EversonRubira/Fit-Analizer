@@ -6,7 +6,7 @@
 
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
-| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0 e 1 na main, schema validado; Bloco 2 implementado (não testado localmente); Bloco 3 não iniciado |
+| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0 e 1 na main, schema validado; Bloco 2 mergeado e testado (`mvn test` local, 6/6); `Frente` implementada em `Skill`/`ExperienciaProfissional` (não testada localmente); Bloco 3 não iniciado |
 | F02 — Fit Matching | Concluído | Não iniciada | Não iniciada |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
@@ -73,8 +73,29 @@ comex com skill de tech, e vice-versa.
 - Momento da decisão: nenhum dado real persistido ainda (Bloco 2 recém
   implementado, ainda não mergeado), então é a hora mais barata que existe
   pra mudar o modelo — depois disso vira migração de dado real.
-- Ainda não implementado: essa mudança de entidade entra junto com o resto
-  do Bloco 2/3, não foi codada nesta sessão (sessão foi só de decisão).
+- **Implementado (2026-09-29):** `Frente.java` criado; `Skill` e
+  `ExperienciaProfissional` ganharam o campo `frente` (`@Enumerated(STRING)`,
+  `nullable = false`), constutores e getters/setters atualizados.
+  `ProfileService.adicionarSkill` passou a exigir `Frente frente` como 4º
+  parâmetro. **Não compilado neste ambiente** (mesma limitação de proxy do
+  Bloco 2 — Maven Central bloqueado no sandbox da sessão); rodar `mvn test`
+  localmente antes de mergear.
+- **Duas decisões de implementação tomadas sem confirmação prévia do
+  usuário** (sinalizadas aqui em vez de travar a implementação, mas a
+  confirmar):
+  1. `Skill.equals()`/`hashCode()` passou a incluir `frente` — duas skills
+     com mesmo nome e mesmos anos, mas frente diferente, não seriam mais
+     `equals()`. Na prática isso não muda comportamento visível hoje, porque
+     `temNome()` (usado no dedup do Service) continua comparando só o nome.
+  2. Dedup de skill (`temNome`) continua **frente-agnóstico**: o mesmo nome
+     não pode existir duas vezes no Profile, mesmo em frentes diferentes.
+     Testado explicitamente em
+     `adicionarSkillDeveFalharQuandoNomeJaExisteMesmoEmFrenteDiferente`.
+     Raciocínio: se uma skill serve às duas frentes, o valor correto é
+     marcá-la `TRANSVERSAL`, não duplicar o nome com frente diferente em
+     cada entrada — duplicar quebraria a garantia de "um nome, uma
+     linha" que já existia antes da `Frente` existir. Faz sentido revisitar
+     se aparecer um caso real de skill com peso/anos diferentes por frente.
 
 **Skills duplicadas e inclusão de skill nova: decidido.** As duas perguntas
 em aberto (bloquear duplicata? PATCH ou endpoint próprio?) se resolvem
@@ -125,7 +146,7 @@ DTO validado) com `nome` nulo quebra sem mensagem clara.
 - `ProfileService`: `criar(owner, bio)`, `buscar(owner)`,
   `atualizar(owner, bio)` — PATCH ficou só com `bio`, já que `owner` é
   imutável e skills tem endpoint próprio —, `excluir(owner)`,
-  `adicionarSkill(owner, nome, anosExperiencia)`,
+  `adicionarSkill(owner, nome, anosExperiencia, frente)`,
   `removerSkill(owner, nome)`.
 - Exceções: `ProfileAlreadyExistsException` (409, `criar`),
   `ProfileNotFoundException` (404, todos os outros métodos quando o owner
@@ -298,10 +319,10 @@ JDK 21 instalado e alinhado com o `pom.xml`.
 
 1. ~~Validar o schema da F01 contra PostgreSQL real.~~ Feito.
 2. ~~Bloco 2 (Repository/Service) e decisões de skill duplicada/remoção.~~
-   PR aberto, aguardando `mvn test` local e merge.
-3. Adicionar `Frente.java` e o campo `frente` em `Skill` e
-   `ExperienciaProfissional` — pendente desde a decisão de 2026-09-29, entra
-   junto do Bloco 2/3 antes de qualquer dado real ser persistido.
+   Mergeado, `mvn test` local rodado (6/6, via Codespaces).
+3. ~~Adicionar `Frente.java` e o campo `frente` em `Skill` e
+   `ExperienciaProfissional`.~~ Implementado nesta sessão, PR aberto,
+   aguardando `mvn test` local e merge.
 4. F01 — Bloco 3 (Controller/DTOs), já contemplando `frente`.
 5. Spec da F02, já contemplando o parâmetro `frente` e a checagem cruzada.
 6. PRD do coletor e da F03.

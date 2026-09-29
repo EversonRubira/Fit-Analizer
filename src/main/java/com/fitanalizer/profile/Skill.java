@@ -2,6 +2,8 @@ package com.fitanalizer.profile;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import java.util.Objects;
 
 @Embeddable
@@ -13,12 +15,17 @@ public class Skill {
     @Column(name = "anos_experiencia", nullable = false)
     private Integer anosExperiencia;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "frente", nullable = false)
+    private Frente frente;
+
     protected Skill() {
     }
 
-    public Skill(String nome, Integer anosExperiencia) {
+    public Skill(String nome, Integer anosExperiencia, Frente frente) {
         this.nome = nome;
         this.anosExperiencia = anosExperiencia;
+        this.frente = frente;
     }
 
     public String getNome() {
@@ -35,6 +42,14 @@ public class Skill {
 
     public void setAnosExperiencia(Integer anosExperiencia) {
         this.anosExperiencia = anosExperiencia;
+    }
+
+    public Frente getFrente() {
+        return frente;
+    }
+
+    public void setFrente(Frente frente) {
+        this.frente = frente;
     }
 
     /**
@@ -54,11 +69,13 @@ public class Skill {
         if (!(o instanceof Skill skill)) {
             return false;
         }
-        return Objects.equals(nome, skill.nome) && Objects.equals(anosExperiencia, skill.anosExperiencia);
+        return Objects.equals(nome, skill.nome)
+                && Objects.equals(anosExperiencia, skill.anosExperiencia)
+                && frente == skill.frente;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(nome, anosExperiencia);
+        return Objects.hash(nome, anosExperiencia, frente);
     }
 }

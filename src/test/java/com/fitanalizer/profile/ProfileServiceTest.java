@@ -49,10 +49,10 @@ class ProfileServiceTest {
     @Test
     void adicionarSkillDeveFalharQuandoNomeJaExisteIgnorandoCaixa() {
         Profile profile = new Profile("everson");
-        profile.addSkill(new Skill("Java", 5));
+        profile.addSkill(new Skill("Java", 5, Frente.TECH));
         when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
 
-        assertThatThrownBy(() -> service.adicionarSkill("everson", "java", 2))
+        assertThatThrownBy(() -> service.adicionarSkill("everson", "java", 2, Frente.TECH))
                 .isInstanceOf(SkillAlreadyExistsException.class);
 
         verify(repository, never()).save(any());
@@ -61,13 +61,25 @@ class ProfileServiceTest {
     @Test
     void adicionarSkillDeveAceitarNomesDiferentesMesmoRelacionados() {
         Profile profile = new Profile("everson");
-        profile.addSkill(new Skill("Java", 5));
+        profile.addSkill(new Skill("Java", 5, Frente.TECH));
         when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
         when(repository.save(profile)).thenReturn(profile);
 
-        service.adicionarSkill("everson", "Arquitetura em Java", 1);
+        service.adicionarSkill("everson", "Arquitetura em Java", 1, Frente.TECH);
 
         assertThat(profile.getSkills()).hasSize(2);
+    }
+
+    @Test
+    void adicionarSkillDeveFalharQuandoNomeJaExisteMesmoEmFrenteDiferente() {
+        Profile profile = new Profile("everson");
+        profile.addSkill(new Skill("Negociação", 5, Frente.COMEX));
+        when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
+
+        assertThatThrownBy(() -> service.adicionarSkill("everson", "Negociação", 3, Frente.TECH))
+                .isInstanceOf(SkillAlreadyExistsException.class);
+
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -82,7 +94,7 @@ class ProfileServiceTest {
     @Test
     void removerSkillDeveRemoverIgnorandoCaixaEEspacos() {
         Profile profile = new Profile("everson");
-        profile.addSkill(new Skill("Java", 5));
+        profile.addSkill(new Skill("Java", 5, Frente.TECH));
         when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
         when(repository.save(profile)).thenReturn(profile);
 
