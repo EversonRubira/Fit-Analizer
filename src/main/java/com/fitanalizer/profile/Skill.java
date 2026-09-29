@@ -37,6 +37,15 @@ public class Skill {
         this.anosExperiencia = anosExperiencia;
     }
 
+    /**
+     * Compara o nome ignorando maiúsculas/minúsculas e espaços nas pontas.
+     * Não faz busca por substring nem relação semântica: "Java" e "java" são
+     * a mesma skill; "Arquitetura em Java" não é.
+     */
+    public boolean temNome(String outroNome) {
+        return outroNome != null && nome.trim().equalsIgnoreCase(outroNome.trim());
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
