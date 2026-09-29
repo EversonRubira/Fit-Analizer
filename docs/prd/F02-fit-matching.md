@@ -104,11 +104,26 @@ verificação e cálculo em código; persiste e devolve um `MatchResult`.
 |---|---|---|
 | `owner` | sim | Identificador do dono do Profile (mesmo da F01) |
 | `textoVaga` | sim | Texto bruto da vaga |
+| `frente` | sim | `COMEX` ou `TECH` — a frente de carreira que a vaga representa (ver seção 6.4a) |
 | `vagaUrl` | não | URL da vaga. Sempre enviada pelo coletor; opcional no uso manual |
 | `reanalisar` | não | Parâmetro opcional. Quando `true`, ignora o dedup e sobrescreve o resultado existente. O coletor **nunca** envia |
 
 O uso manual e o coletor chamam **o mesmo endpoint** com **o mesmo contrato**.
 Não existe endpoint separado para o coletor.
+
+**Assumption:** `frente` é obrigatório e informado por quem chama — não é
+inferência livre da Claude. Tanto o coletor quanto o uso manual já sabem a
+frente da vaga no momento da chamada (o coletor busca por frente; no uso
+manual, é a pessoa que está a candidatar-se que sabe). Deixar a Claude
+classificar sozinha, sem esse parâmetro, reabriria no nível da frente o
+mesmo problema que a verificação da seção 6.5 existe para evitar no nível da
+evidência: confiar sem checagem num julgamento de LLM. Ver seção 6.4a.
+
+**Assumption:** `frente` reutiliza o enum `Frente` da F01
+(`COMEX`, `TECH`, `TRANSVERSAL`), mas só `COMEX` e `TECH` são valores válidos
+de entrada aqui — `TRANSVERSAL` é uma propriedade de skill/experiência
+(o que é transferível entre as duas frentes), não uma classificação possível
+para a vaga em si. Uma vaga é sempre de uma frente ou da outra.
 
 **Assumption:** o formato exato (body JSON vs. query param para `reanalisar`,
 path, códigos HTTP) fica para a Spec em `docs/specs/`.
@@ -197,12 +212,37 @@ Requisitos desejáveis **não** são pedidos à Claude nem exibidos em v1.
 
 4. **Marca de revisão** (seção 6.6).
 
+#### 6.4a Frente da vaga
+
+O Profile da F01 passa a ter `Frente` (`COMEX`/`TECH`/`TRANSVERSAL`) em cada
+skill e experiência profissional. A F02 usa o parâmetro `frente` do
+contrato de entrada (seção 6.1) em dois pontos:
+
+1. **Escopo do que é enviado à Claude:** o insumo do Profile enviado no
+   prompt (seção 8) é filtrado para conter apenas skills/experiências da
+   `frente` informada **+ `TRANSVERSAL`**. Não envia dado da outra frente —
+   evita que evidência de uma vaga de comex apareça, mesmo por engano, numa
+   análise de tech, e vice-versa.
+2. **Checagem cruzada:** a Claude também classifica a frente da vaga a
+   partir do próprio texto, como parte da resposta estruturada. Se a
+   classificação da Claude divergir do parâmetro `frente` informado, o
+   resultado é marcado `revisar = true` (condição nova na seção 6.6) — mesmo
+   mecanismo já usado para zonas de fronteira de aderência, reaproveitado em
+   vez de criar um caminho de erro novo.
+
+**Assumption:** a checagem cruzada gera `revisar = true`, não erro nem
+rejeição da análise — o parâmetro informado por quem chama continua sendo a
+fonte de verdade usada no filtro do Profile; a divergência só sinaliza que
+vale conferência humana.
+
 #### 6.5 Verificação de evidência (v1, sem custo de LLM)
 
 Regra: **a Claude nunca pode inventar evidência.**
 
 - Após a resposta, o código confere se cada `evidencia_ref` existe de fato no
-  Profile **daquele owner** (skill ou experiência profissional).
+  Profile **daquele owner**, dentro do subconjunto já filtrado pela `frente`
+  (seção 6.4a) — skill ou experiência de outra frente não conta como
+  evidência válida, mesmo que exista no Profile.
 - Se não existir: o requisito é **rebaixado para `nenhum`**, o evento é
   registrado no log como **alucinação**, e a análise **segue** (não rejeita a
   análise inteira).
@@ -224,7 +264,9 @@ persiste como `nenhum`, sem a referência rejeitada.
 - `aderenciaPct` em zona de fronteira de decisão: **28–32, 48–52, 68–72,
   83–87**;
 - algum requisito foi **rebaixado** por evidência inexistente no Profile;
-- a análise é **inconclusiva** (seção 6.7).
+- a análise é **inconclusiva** (seção 6.7);
+- a classificação de frente da Claude diverge do parâmetro `frente`
+  informado na chamada (seção 6.4a).
 
 O log registra a **causa** de cada `revisar = true` (fronteira, evidência
 rebaixada ou inconclusiva; mais de uma quando coincidirem), para que a
@@ -257,6 +299,7 @@ com 0% legítimos, criar um valor de decisão próprio (`inconclusiva`) e deixar
 |---|---|
 | `id` | Identificador |
 | `profile` | `@ManyToOne` para o `Profile` da F01 |
+| `frente` | `COMEX` ou `TECH` — a frente informada na chamada (seção 6.4a). Persistida para a F03 ranquear por frente e para a F04 filtrar o Profile ao gerar CV |
 | `vagaChave` | NOT NULL. URL ou `"hash:" + SHA-256`. Parte da UNIQUE `(profile_id, vaga_chave)` |
 | `vagaUrl` | URL da vaga em coluna própria, **nula quando não informada**. Para exibição na F03 |
 | `aderenciaPct` | Inteiro 0–100, calculado em código |
@@ -354,10 +397,13 @@ Spec.
 
 **Consumes:**
 - **F01 — Cadastro de Perfil Técnico:** o `Profile` do `owner` (skills com
-  anos de experiência, histórico profissional com tecnologias usadas, bio).
-  Usado em dois momentos:
-  1. como insumo enviado à Claude API para a classificação;
-  2. como fonte de verdade na verificação de `evidencia_ref`.
+  anos de experiência, histórico profissional com tecnologias usadas, bio),
+  incluindo a `Frente` (`COMEX`/`TECH`/`TRANSVERSAL`) de cada skill e
+  experiência. Usado em dois momentos:
+  1. como insumo enviado à Claude API para a classificação, já filtrado pela
+     `frente` da vaga + `TRANSVERSAL` (seção 6.4a);
+  2. como fonte de verdade na verificação de `evidencia_ref`, dentro do
+     mesmo subconjunto filtrado.
 - **Identificador `owner`** definido pela F01, reutilizado como chave de acesso.
 - **Claude API** (externa), via `FitAnalysisClient`, com chave por variável de
   ambiente.
@@ -366,18 +412,24 @@ Spec.
 
 **Provides:**
 - **Para a F03 (consulta e ranking):** `MatchResult` persistido por
-  `profile`, com `aderenciaPct`, `decisao`, `revisar`, `requisitos`,
-  `gapsRiscos`, `vagaUrl` (para exibição), `versaoPrompt`, `modelo` e
-  `analisadoEm`. Garantia: no máximo **um** resultado por
+  `profile`, com `frente`, `aderenciaPct`, `decisao`, `revisar`,
+  `requisitos`, `gapsRiscos`, `vagaUrl` (para exibição), `versaoPrompt`,
+  `modelo` e `analisadoEm`. Garantia: no máximo **um** resultado por
   `(profile, vaga_chave)`.
+- **Para a F04 (geração de CV, fora deste PRD):** o `MatchResult`, incluindo
+  `frente`, como insumo para filtrar o Profile ao gerar o CV adaptado. A F04
+  decide, na própria PRD, se precisa do texto da vaga (não persistido aqui —
+  ver seção 9) reenviado no momento da geração.
 - **Para o coletor:** o `MatchResult` como resposta HTTP do mesmo endpoint,
   idempotente para a mesma vaga.
 
 **Nota de integração com a F01:** excluir um Profile na F01 **apaga junto os
 `MatchResult` associados** — são dado derivado e recalculável. A F01 **não
 passa a conhecer** o `MatchResult`: a dependência continua em um único
-sentido (F02 → F01). O mecanismo (cascata no banco, declarada do lado da
-F02) fica para a Spec.
+sentido (F02 → F01). **Decidido** (não fica mais para a Spec): a cascata é
+feita no nível de aplicação — o Service da F02 apaga os `MatchResult` do
+owner antes de deletar o Profile — e não como `ON DELETE CASCADE` no banco.
+Motivo e trade-offs registrados no `STATUS.md`.
 
 ```mermaid
 graph LR
@@ -389,8 +441,8 @@ graph LR
     CLAUDE["Claude API"]
 
     F01 -->|"Profile por owner"| F02
-    MAN -->|"textoVaga + owner + vagaUrl? + reanalisar?"| F02
-    COL -->|"textoVaga + owner + vagaUrl"| F02
+    MAN -->|"textoVaga + owner + frente + vagaUrl? + reanalisar?"| F02
+    COL -->|"textoVaga + owner + frente + vagaUrl"| F02
     F02 -->|"Profile + vaga → requisitos classificados (JSON)"| CLAUDE
     F02 -->|"MatchResult (resposta HTTP)"| COL
     F02 -->|"MatchResult persistido"| F03
@@ -405,6 +457,15 @@ graph LR
     teste julgado à mão; **ou**
   - a proporção de resultados com `revisar = true` passar de **30%** (ponto de
     partida, a calibrar; ver seção 5).
+  - Reavaliado em 2026-09-29 e mantido fora de escopo, conscientemente: ainda
+    não há dado de uso real para saber se algum dos gatilhos dispara.
+    Adiado, não esquecido.
+- **Geração de CV adaptado à vaga.** Vira **F04 — Geração de CV**, com PRD
+  próprio, consumindo o `MatchResult` desta feature (incluindo `frente`).
+  Motivo de não entrar aqui: matching é julgamento estruturado e verificável
+  (fórmula de aderência, dedup, checagem de alucinação); geração de CV é
+  trabalho generativo, sujeito a iteração — natureza diferente o bastante
+  para não misturar num PRD já fechado. Detalhe registrado no `STATUS.md`.
 - **Consulta e ranking de resultados** — F03.
 - **O coletor** — projeto separado; aqui aparece apenas como cliente HTTP.
 - **Persistir o texto da vaga** no `MatchResult` — apenas o hash, quando usado
