@@ -7,12 +7,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class ProfileServiceTest {
@@ -101,5 +104,68 @@ class ProfileServiceTest {
         service.removerSkill("everson", " java ");
 
         assertThat(profile.getSkills()).isEmpty();
+    }
+
+    @Test
+    void adicionarExperienciaDeveIncluirNoHistorico() {
+        Profile profile = new Profile("everson");
+        when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(repository.save(profile)).thenReturn(profile);
+
+        service.adicionarExperiencia("everson", "Accenture", "Analista", Frente.TECH,
+                LocalDate.of(2023, 1, 1), null, List.of("Java", "Spring"));
+
+        assertThat(profile.getHistoricoProfissional()).hasSize(1);
+        assertThat(profile.getHistoricoProfissional().get(0).getEmpresa()).isEqualTo("Accenture");
+    }
+
+    @Test
+    void atualizarExperienciaDeveFalharQuandoNaoExiste() {
+        Profile profile = new Profile("everson");
+        when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
+
+        assertThatThrownBy(() -> service.atualizarExperiencia("everson", 99L, null, null, null, null, null, null))
+                .isInstanceOf(ExperienciaNotFoundException.class);
+    }
+
+    @Test
+    void atualizarExperienciaDeveAlterarSomenteCamposInformados() {
+        Profile profile = new Profile("everson");
+        ExperienciaProfissional experiencia = new ExperienciaProfissional("Accenture", "Analista", Frente.TECH,
+                LocalDate.of(2023, 1, 1), null);
+        ReflectionTestUtils.setField(experiencia, "id", 1L);
+        profile.addExperienciaProfissional(experiencia);
+        when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(repository.save(profile)).thenReturn(profile);
+
+        // Só encerra o emprego (dataFim); empresa/cargo/frente/dataInicio ficam como estavam.
+        service.atualizarExperiencia("everson", 1L, null, null, null, null, LocalDate.of(2026, 9, 1), null);
+
+        assertThat(experiencia.getEmpresa()).isEqualTo("Accenture");
+        assertThat(experiencia.getDataFim()).isEqualTo(LocalDate.of(2026, 9, 1));
+    }
+
+    @Test
+    void removerExperienciaDeveFalharQuandoNaoExiste() {
+        Profile profile = new Profile("everson");
+        when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
+
+        assertThatThrownBy(() -> service.removerExperiencia("everson", 1L))
+                .isInstanceOf(ExperienciaNotFoundException.class);
+    }
+
+    @Test
+    void removerExperienciaDeveRemoverDoHistorico() {
+        Profile profile = new Profile("everson");
+        ExperienciaProfissional experiencia = new ExperienciaProfissional("Accenture", "Analista", Frente.TECH,
+                LocalDate.of(2023, 1, 1), null);
+        ReflectionTestUtils.setField(experiencia, "id", 1L);
+        profile.addExperienciaProfissional(experiencia);
+        when(repository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(repository.save(profile)).thenReturn(profile);
+
+        service.removerExperiencia("everson", 1L);
+
+        assertThat(profile.getHistoricoProfissional()).isEmpty();
     }
 }
