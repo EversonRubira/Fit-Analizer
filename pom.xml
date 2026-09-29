@@ -58,12 +58,12 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <!-- O ByteBuddy embutido no Mockito/Spring Boot 3.3.4 ainda não
-                         suporta bytecode do Java 25 (só até Java 23) -- afeta só o
+                         suporta bytecode do Java 25 (só até Java 23); afeta só o
                          "inline mock maker" usado por @MockBean (ProfileControllerTest),
                          não o @Mock simples do ProfileServiceTest. Isso é um problema
                          de JDK de execução dos testes (ex: Codespaces vem com JDK 25 por
-                         padrão), não do bytecode compilado -- o projeto continua
-                         compilando para --release 21. Flag oficial do ByteBuddy pra
+                         padrão), não do bytecode compilado; o projeto continua
+                         compilando com release 21. Flag oficial do ByteBuddy pra
                          tentar mesmo em JDK não oficialmente suportado. Remover quando
                          o Spring Boot atualizar pra uma versão de ByteBuddy com suporte
                          nativo ao Java 25. -->
