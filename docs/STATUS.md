@@ -6,7 +6,7 @@
 
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
-| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0 e 1 na main, schema validado; Bloco 2 mergeado e testado; `Frente` em `Skill`/`ExperienciaProfissional` mergeada e testada (`mvn test` local, sem problemas); Bloco 3 não iniciado |
+| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1 e 2 na main, testados; `Frente` mergeada e testada; Bloco 3 (Controller/DTOs) implementado, aguardando `mvn test` local e merge |
 | F02 — Fit Matching | Concluído | Não iniciada | Não iniciada |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
@@ -23,7 +23,34 @@ Documentos: `docs/prd/F01-cadastro-perfil-tecnico.md`, `docs/specs/F01-cadastro-
   alcança o Maven Central (só PyPI/npm/etc. liberados no proxy), diferente
   da validação de schema (que rodou Postgres local dentro do container).
   Rodar `mvn test` localmente antes de mergear.
-- Bloco 3 (Controller/DTOs): não iniciado.
+- **Bloco 3 (Controller/DTOs): implementado (2026-09-29).** Desenho completo
+  na Spec seção 2. Endpoints de perfil (CRUD), skills (add/remove) e
+  **experiências profissionais** (add/update/remove — decisão nova desta
+  sessão, não fica mais pendente). DTOs como `record` em
+  `com.fitanalizer.profile.dto`, nunca a entidade JPA exposta direto.
+  **Não compilado neste ambiente** (mesma limitação de proxy — Maven Central
+  bloqueado no sandbox). Rodar `mvn test` localmente antes de mergear.
+- **Achado durante o desenho do Bloco 3:** `Profile.skills`,
+  `Profile.historicoProfissional` **e** `tecnologiasUsadas` (dentro de cada
+  `ExperienciaProfissional`, um nível mais fundo — achado só na revisão) são
+  coleções `LAZY`, e o Controller monta o DTO de resposta fora da transação
+  do Service. Sem correção, isso quebraria com
+  `LazyInitializationException`. Corrigido com `Hibernate.initialize(...)`
+  nas três, dentro de `ProfileService.buscarOuFalhar`, ainda dentro da
+  transação — detalhe completo na Spec, seção 2.3.
+- **Limitação conhecida:** o PATCH de experiência não consegue reverter
+  `dataFim` de volta a `null` (reabrir um emprego marcado como encerrado),
+  porque `null` nesse campo já é um estado de domínio válido (emprego
+  atual), não "campo vazio" — mesma ambiguidade seria resolvida com
+  `Optional`/`JsonNullable`, mas não há caso de uso real hoje pra
+  justificar essa complexidade. Detalhe na Spec, seção 2.5.
+- **Estratégia de teste do Bloco 3:** teste orientado a risco, não cobertura
+  de 100%. `ProfileServiceTest` (Mockito) continua cobrindo regra de
+  negócio; `ProfileControllerTest` novo (`@WebMvcTest`/MockMvc) cobre só a
+  costura HTTP → DTO → Service → HTTP nos endpoints representativos (status
+  code, validação `@Valid` retornando 400) — não é exaustivo por endpoint,
+  é prova de que a fiação funciona. Getters/setters e DTOs sem lógica não
+  têm teste próprio, de propósito.
 
 **Validação de schema (pendência antes do Bloco 2): resolvida.** Feita com
 PostgreSQL 16 local, dentro do container da sessão. A tentativa no Supabase foi
@@ -130,12 +157,15 @@ nas entidades do Bloco 1). Testes unitários do Service com Mockito em
 `ProfileServiceTest` (duplicata, not-found, remoção, case-insensitive) —
 não executados neste ambiente (ver nota acima).
 
-**Lacuna conhecida:** `adicionarSkill` chama `nome.trim()` sem checar
-`null` antes — `nome = null` estoura `NullPointerException` cru, não um
-erro tratado. Deixado assim de propósito: validação de entrada
-(`@NotBlank` etc.) é responsabilidade do DTO no Bloco 3, que ainda não
-existe. Enquanto isso, chamar o Service direto (fora de um Controller com
-DTO validado) com `nome` nulo quebra sem mensagem clara.
+**Lacuna conhecida — resolvida pelo Bloco 3:** `adicionarSkill` chama
+`nome.trim()` sem checar `null` antes — `nome = null` estoura
+`NullPointerException` cru, não um erro tratado. Isso só era um risco
+real enquanto não existia validação de entrada; agora `SkillRequest.nome`
+tem `@NotBlank`, e a requisição HTTP nunca chega ao Service com `nome`
+nulo — o Controller responde 400 antes disso. **Continua existindo** se
+o Service for chamado direto (fora do Controller, ex: em teste ou script)
+com `nome` nulo — não removido, porque validação de entrada é
+responsabilidade da borda HTTP, não do Service.
 
 **Desenho do Bloco 2 (Repository/Service), antes de codar**
 - `ProfileRepository extends JpaRepository<Profile, Long>`: só
@@ -321,7 +351,9 @@ JDK 21 instalado e alinhado com o `pom.xml`.
    Mergeado, `mvn test` local rodado (6/6, via Codespaces).
 3. ~~Adicionar `Frente.java` e o campo `frente` em `Skill` e
    `ExperienciaProfissional`.~~ Mergeado (PR #11), `mvn test` local ok.
-4. F01 — Bloco 3 (Controller/DTOs), já contemplando `frente`.
+4. ~~F01 — Bloco 3 (Controller/DTOs), já contemplando `frente` e
+   experiências.~~ Implementado, PR aberto, aguardando `mvn test` local e
+   merge.
 5. Spec da F02, já contemplando o parâmetro `frente` e a checagem cruzada.
 6. PRD do coletor e da F03.
 7. PRD da F04 (Geração de CV) — só depois da F02 implementada e em uso real.

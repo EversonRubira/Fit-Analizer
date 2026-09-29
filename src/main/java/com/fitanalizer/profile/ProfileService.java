@@ -1,5 +1,8 @@
 package com.fitanalizer.profile;
 
+import java.time.LocalDate;
+import java.util.List;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,8 +81,87 @@ public class ProfileService {
         repository.save(profile);
     }
 
+    @Transactional
+    public ExperienciaProfissional adicionarExperiencia(String owner, String empresa, String cargo, Frente frente,
+            LocalDate dataInicio, LocalDate dataFim, List<String> tecnologiasUsadas) {
+        Profile profile = buscarOuFalhar(owner);
+
+        ExperienciaProfissional experiencia = new ExperienciaProfissional(empresa, cargo, frente, dataInicio,
+                dataFim);
+        if (tecnologiasUsadas != null) {
+            experiencia.setTecnologiasUsadas(tecnologiasUsadas);
+        }
+
+        profile.addExperienciaProfissional(experiencia);
+        repository.save(profile);
+        return experiencia;
+    }
+
+    @Transactional
+    public ExperienciaProfissional atualizarExperiencia(String owner, Long experienciaId, String empresa,
+            String cargo, Frente frente, LocalDate dataInicio, LocalDate dataFim, List<String> tecnologiasUsadas) {
+        Profile profile = buscarOuFalhar(owner);
+        ExperienciaProfissional experiencia = buscarExperienciaOuFalhar(profile, owner, experienciaId);
+
+        // Mesma semântica de PATCH do bio: null = não altera. Exceção:
+        // dataFim=null já é um estado válido de domínio (emprego atual), então
+        // não dá pra reabrir um emprego encerrado via PATCH (limitação
+        // conhecida, documentada no STATUS.md — não há caso de uso real hoje
+        // para reverter dataFim de volta a null).
+        if (empresa != null) {
+            experiencia.setEmpresa(empresa);
+        }
+        if (cargo != null) {
+            experiencia.setCargo(cargo);
+        }
+        if (frente != null) {
+            experiencia.setFrente(frente);
+        }
+        if (dataInicio != null) {
+            experiencia.setDataInicio(dataInicio);
+        }
+        if (dataFim != null) {
+            experiencia.setDataFim(dataFim);
+        }
+        if (tecnologiasUsadas != null) {
+            experiencia.setTecnologiasUsadas(tecnologiasUsadas);
+        }
+
+        repository.save(profile);
+        return experiencia;
+    }
+
+    @Transactional
+    public void removerExperiencia(String owner, Long experienciaId) {
+        Profile profile = buscarOuFalhar(owner);
+        ExperienciaProfissional experiencia = buscarExperienciaOuFalhar(profile, owner, experienciaId);
+
+        profile.removeExperienciaProfissional(experiencia);
+        repository.save(profile);
+    }
+
+    private ExperienciaProfissional buscarExperienciaOuFalhar(Profile profile, String owner, Long experienciaId) {
+        return profile.getHistoricoProfissional().stream()
+                .filter(experiencia -> experiencia.getId().equals(experienciaId))
+                .findFirst()
+                .orElseThrow(() -> new ExperienciaNotFoundException(owner, experienciaId));
+    }
+
     private Profile buscarOuFalhar(String owner) {
-        return repository.findByOwner(owner)
+        Profile profile = repository.findByOwner(owner)
                 .orElseThrow(() -> new ProfileNotFoundException(owner));
+        // Força o carregamento das coleções LAZY ainda dentro da transação.
+        // Necessário porque o Controller (Bloco 3) monta o DTO de resposta
+        // depois que este método retorna, já fora da transação — com
+        // open-in-view: false, acessar uma coleção LAZY nesse ponto lançaria
+        // LazyInitializationException. Duas camadas: skills e o historico em
+        // si, MAS TAMBÉM tecnologiasUsadas dentro de cada
+        // ExperienciaProfissional — é @ElementCollection LAZY um nível mais
+        // fundo, fácil de esquecer porque não aparece só olhando pra Profile.
+        Hibernate.initialize(profile.getSkills());
+        Hibernate.initialize(profile.getHistoricoProfissional());
+        profile.getHistoricoProfissional().forEach(experiencia -> Hibernate.initialize(
+                experiencia.getTecnologiasUsadas()));
+        return profile;
     }
 }
