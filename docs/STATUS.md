@@ -342,7 +342,19 @@ que buscar, consulta APIs públicas de emprego e envia cada vaga para a F02.
 
 ## Ambiente
 
-JDK 21 instalado e alinhado com o `pom.xml`.
+JDK 21 instalado e alinhado com o `pom.xml` na máquina principal.
+
+**GitHub Codespaces vem com JDK 25 por padrão** — incompatível em runtime
+com o ByteBuddy embutido no Mockito do Spring Boot 3.3.4 (suporta bytecode
+só até Java 23). Só afeta testes que usam `@MockBean` do Spring
+(`ProfileControllerTest`, primeiro no projeto a usar isso — o
+`@Mock` simples do Mockito em `ProfileServiceTest` não é afetado, usa
+caminho mais leve). Corrigido com
+`-Dnet.bytebuddy.experimental=true` no `maven-surefire-plugin` (pom.xml) —
+não é downgrade de JDK nem mudança de bytecode alvo, só permite o
+ByteBuddy tentar instrumentar mesmo numa JVM mais nova do que ele
+oficialmente testou. Remover essa flag quando uma versão futura do Spring
+Boot trouxer ByteBuddy com suporte nativo a Java 25.
 
 ## Próximos passos (nesta ordem)
 
