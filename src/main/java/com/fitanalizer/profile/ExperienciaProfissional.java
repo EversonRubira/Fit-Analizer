@@ -4,6 +4,8 @@ import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -33,6 +35,10 @@ public class ExperienciaProfissional {
     @Column(name = "cargo", nullable = false)
     private String cargo;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "frente", nullable = false)
+    private Frente frente;
+
     @Column(name = "data_inicio", nullable = false)
     private LocalDate dataInicio;
 
@@ -48,9 +54,11 @@ public class ExperienciaProfissional {
     protected ExperienciaProfissional() {
     }
 
-    public ExperienciaProfissional(String empresa, String cargo, LocalDate dataInicio, LocalDate dataFim) {
+    public ExperienciaProfissional(String empresa, String cargo, Frente frente, LocalDate dataInicio,
+            LocalDate dataFim) {
         this.empresa = empresa;
         this.cargo = cargo;
+        this.frente = frente;
         this.dataInicio = dataInicio;
         this.dataFim = dataFim;
     }
@@ -81,6 +89,14 @@ public class ExperienciaProfissional {
 
     public void setCargo(String cargo) {
         this.cargo = cargo;
+    }
+
+    public Frente getFrente() {
+        return frente;
+    }
+
+    public void setFrente(Frente frente) {
+        this.frente = frente;
     }
 
     public LocalDate getDataInicio() {

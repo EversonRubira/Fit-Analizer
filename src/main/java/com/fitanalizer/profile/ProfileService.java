@@ -48,15 +48,18 @@ public class ProfileService {
     }
 
     @Transactional
-    public Skill adicionarSkill(String owner, String nome, Integer anosExperiencia) {
+    public Skill adicionarSkill(String owner, String nome, Integer anosExperiencia, Frente frente) {
         Profile profile = buscarOuFalhar(owner);
 
+        // Dedup por nome, sem considerar frente: se a mesma skill parecer
+        // pertencer às duas frentes, a modelagem correta é marcá-la
+        // TRANSVERSAL, não duplicar o nome com frente diferente em cada uma.
         boolean jaExiste = profile.getSkills().stream().anyMatch(skill -> skill.temNome(nome));
         if (jaExiste) {
             throw new SkillAlreadyExistsException(owner, nome);
         }
 
-        Skill novaSkill = new Skill(nome.trim(), anosExperiencia);
+        Skill novaSkill = new Skill(nome.trim(), anosExperiencia, frente);
         profile.addSkill(novaSkill);
         repository.save(profile);
         return novaSkill;
