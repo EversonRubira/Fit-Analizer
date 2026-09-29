@@ -6,7 +6,7 @@
 
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
-| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1 e 2 na main, testados; `Frente` mergeada e testada; Bloco 3 (Controller/DTOs) implementado, aguardando `mvn test` local e merge |
+| F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
 | F02 — Fit Matching | Concluído | Não iniciada | Não iniciada |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
@@ -23,13 +23,13 @@ Documentos: `docs/prd/F01-cadastro-perfil-tecnico.md`, `docs/specs/F01-cadastro-
   alcança o Maven Central (só PyPI/npm/etc. liberados no proxy), diferente
   da validação de schema (que rodou Postgres local dentro do container).
   Rodar `mvn test` localmente antes de mergear.
-- **Bloco 3 (Controller/DTOs): implementado (2026-09-29).** Desenho completo
-  na Spec seção 2. Endpoints de perfil (CRUD), skills (add/remove) e
-  **experiências profissionais** (add/update/remove — decisão nova desta
-  sessão, não fica mais pendente). DTOs como `record` em
+- **Bloco 3 (Controller/DTOs): mergeado e testado (2026-09-29).** Desenho
+  completo na Spec seção 2. Endpoints de perfil (CRUD), skills
+  (add/remove) e **experiências profissionais** (add/update/remove —
+  decisão nova desta sessão, não ficou pendente). DTOs como `record` em
   `com.fitanalizer.profile.dto`, nunca a entidade JPA exposta direto.
-  **Não compilado neste ambiente** (mesma limitação de proxy — Maven Central
-  bloqueado no sandbox). Rodar `mvn test` localmente antes de mergear.
+  `mvn test` local (Codespaces): 20/20 passando (8 `ProfileControllerTest`
+  + 12 `ProfileServiceTest`).
 - **Achado durante o desenho do Bloco 3:** `Profile.skills`,
   `Profile.historicoProfissional` **e** `tecnologiasUsadas` (dentro de cada
   `ExperienciaProfissional`, um nível mais fundo — achado só na revisão) são
@@ -364,8 +364,12 @@ Boot trouxer ByteBuddy com suporte nativo a Java 25.
 3. ~~Adicionar `Frente.java` e o campo `frente` em `Skill` e
    `ExperienciaProfissional`.~~ Mergeado (PR #11), `mvn test` local ok.
 4. ~~F01 — Bloco 3 (Controller/DTOs), já contemplando `frente` e
-   experiências.~~ Implementado, PR aberto, aguardando `mvn test` local e
-   merge.
-5. Spec da F02, já contemplando o parâmetro `frente` e a checagem cruzada.
-6. PRD do coletor e da F03.
-7. PRD da F04 (Geração de CV) — só depois da F02 implementada e em uso real.
+   experiências.~~ Mergeado (PR #12), corrigido nos PRs #13 (ByteBuddy/JDK
+   25) e #14 (comentário XML inválido no pom.xml), `mvn test` local:
+   20/20 passando.
+5. Priorizar CI (GitHub Actions rodando `mvn test` em todo PR) — os PRs
+   #13 e #14 só existiram porque não havia rede automática pegando esses
+   erros antes do merge. Ver seção "Ambiente".
+6. Spec da F02, já contemplando o parâmetro `frente` e a checagem cruzada.
+7. PRD do coletor e da F03.
+8. PRD da F04 (Geração de CV) — só depois da F02 implementada e em uso real.
