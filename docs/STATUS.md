@@ -64,6 +64,33 @@ juntas:
   mais comparável contra o texto da vaga (F02) e menos sujeito a
   autoavaliação subjetiva, que é o tipo de dado mole que a checagem de
   alucinação da F02 existe para não deixar passar sem crítica.
+- Comparação de `nome` para duplicata: case-insensitive + trim (normaliza
+  antes de comparar). `"Java"` e `"java"` colidem; `"Arquitetura em Java"`
+  não colide com `"Java"` — é comparação de string normalizada, não busca
+  por substring ou relação semântica entre skills.
+- `DELETE .../skills/{nome}` de skill inexistente: 404
+  (`SkillNotFoundException`), simétrico ao resto do Service.
+
+**Desenho do Bloco 2 (Repository/Service), antes de codar**
+- `ProfileRepository extends JpaRepository<Profile, Long>`: só
+  `Optional<Profile> findByOwner(String owner)` além do que o
+  `JpaRepository` já dá. Como o design inteiro é chaveado por `owner`
+  (IDOR aceito), quase toda operação do Service começa carregando por ele.
+- `ProfileService`: `criar(owner, bio)`, `buscar(owner)`,
+  `atualizar(owner, bio)` — PATCH ficou só com `bio`, já que `owner` é
+  imutável e skills tem endpoint próprio —, `excluir(owner)`,
+  `adicionarSkill(owner, nome, anosExperiencia)`,
+  `removerSkill(owner, nome)`.
+- Exceções: `ProfileAlreadyExistsException` (409, `criar`),
+  `ProfileNotFoundException` (404, todos os outros métodos quando o owner
+  não existe), `SkillAlreadyExistsException` (409, `adicionarSkill`),
+  `SkillNotFoundException` (404, `removerSkill`).
+- `excluir`: carrega a entidade e chama `repository.delete(profile)` — a
+  cascata do Hibernate cuida do resto (skills via `@ElementCollection`,
+  histórico via `orphanRemoval`), conforme já validado.
+- `historicoProfissional` fica fora do Bloco 2/3 por ora — ainda não
+  decidimos o padrão de endpoint pra ele (provável espelhar skills, mas
+  não fechado).
 
 **Changelog do Bloco 1**
 - 2026-09-28: constraint UNIQUE de `profiles.owner` ganhou nome fixo
