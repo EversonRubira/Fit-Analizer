@@ -9,3 +9,14 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+
+fitanalizer:
+  claude:
+    # ANTHROPIC_API_KEY é lida diretamente do ambiente pelo SDK, não daqui
+    # (Spec F02, seção 1.2). Não confundir com o modelo/versão abaixo.
+    model: ${CLAUDE_MODEL:claude-haiku-4-5}
+    # Versão do CONTEÚDO do prompt (não do SDK/modelo) — persistida em
+    # MatchResult.versaoPrompt, incrementar manualmente a cada mudança de
+    # prompt (aciona o conjunto de regressão, PRD F02 seção 5).
+    prompt-version: v1
+    timeout-seconds: 60

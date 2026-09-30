@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade e cálculo puro (2026-09-30) |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade, cálculo puro e cliente Claude (2026-09-30, cliente não verificado por compilação) |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -251,10 +251,27 @@ experiência válida/inexistente/token malformado, referência nula/vazia,
 item fora da frente já filtrado). `mvn test` local (Codespaces, 2026-09-30):
 **36/36 passando** (16 novos da F02 + 20 já existentes da F01).
 
-**Ainda faltam (passos 4-6 da Spec):** `FitAnalysisClient` +
-implementação com o SDK da Anthropic (só depois de ter a chave de API),
-`MatchService` juntando filtro por frente + dedup + verificação + cálculo,
-e `MatchController` + DTOs.
+**Implementação — passo 4 da Spec (seção 9), 2026-09-30.**
+`FitAnalysisClient` (interface) + `FitAnalysisRequest`/`FitAnalysisResult`
++ `FitAnalysisException` + `ClaudeFitAnalysisClient` (implementação real,
+SDK `com.anthropic:anthropic-java`, *tool use*, prompt com tokens
+`skill:<nome>`/`exp:<id>`). Properties `fitanalizer.claude.*` no
+`application.yml` (`model`, `prompt-version`, `timeout-seconds`).
+
+**Risco assumido nesta entrega:** a construção do `Tool`/schema e a
+leitura do `ToolUseBlock` da resposta (dentro de
+`ClaudeFitAnalysisClient`) foram escritas com base na documentação pública
+do SDK, sem compilar contra a dependência real neste ambiente (sandbox
+sem Maven Central). Os nomes exatos dos métodos do builder podem não
+bater com a versão baixada. **Rodar `mvn compile` (nem precisa `test`
+ainda) antes de qualquer outra coisa** — se falhar, é provável que seja
+só ajuste de nome de método, não de desenho; mandar o erro de volta.
+Nenhum teste automatizado foi escrito para esta classe ainda, de
+propósito: só faz sentido depois de confirmar que compila.
+
+**Ainda faltam (passos 5-6 da Spec), aguardando confirmação de que o
+passo 4 compila:** `MatchService` juntando filtro por frente + dedup +
+verificação + cálculo, e `MatchController` + DTOs.
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
