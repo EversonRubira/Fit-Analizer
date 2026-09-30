@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade, cálculo puro e cliente Claude (2026-09-30, cliente não verificado por compilação) |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade, cálculo puro e cliente Claude (2026-09-30, compilação confirmada) |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -258,16 +258,14 @@ SDK `com.anthropic:anthropic-java`, *tool use*, prompt com tokens
 `skill:<nome>`/`exp:<id>`). Properties `fitanalizer.claude.*` no
 `application.yml` (`model`, `prompt-version`, `timeout-seconds`).
 
-**Risco assumido nesta entrega:** a construção do `Tool`/schema e a
-leitura do `ToolUseBlock` da resposta (dentro de
-`ClaudeFitAnalysisClient`) foram escritas com base na documentação pública
-do SDK, sem compilar contra a dependência real neste ambiente (sandbox
-sem Maven Central). Os nomes exatos dos métodos do builder podem não
-bater com a versão baixada. **Rodar `mvn compile` (nem precisa `test`
-ainda) antes de qualquer outra coisa** — se falhar, é provável que seja
-só ajuste de nome de método, não de desenho; mandar o erro de volta.
-Nenhum teste automatizado foi escrito para esta classe ainda, de
-propósito: só faz sentido depois de confirmar que compila.
+**Risco assumido e resolvido:** a primeira versão tinha 2 erros de
+compilação (`tools(List<Tool>)` → precisa `ToolUnion.ofTool(...)`;
+`toolUse.input()` → accessor correto é `toolUse._input()`), reportados
+pelo Everson (`mvn compile` no Codespaces) e corrigidos consultando o
+código-fonte real do SDK no GitHub. **`mvn compile` confirmado: BUILD
+SUCCESS (2026-09-30).** Nenhum teste automatizado para esta classe ainda,
+de propósito — só faz sentido depois de ter a chave de API pra validar
+com uma chamada real.
 
 **Ainda faltam (passos 5-6 da Spec), aguardando confirmação de que o
 passo 4 compila:** `MatchService` juntando filtro por frente + dedup +
