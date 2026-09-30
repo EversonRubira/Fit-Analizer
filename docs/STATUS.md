@@ -1,6 +1,6 @@
 # Status do projeto — Fit Analizer
 
-**Atualizado em:** 2026-09-29
+**Atualizado em:** 2026-09-30
 
 ## Visão geral
 
@@ -224,6 +224,29 @@ opcional, `reanalisar=true` opcional.
   aplica as faixas: 85–100 `cv_prioritario`, 70–84 `cv_carta`,
   50–69 `cv_carta_com_aviso`, 30–49 `nao_candidatar`, 0–29 `fora_escopo`.
 
+**Provedor de LLM: decidido (2026-09-30).** Claude API, modelo **Haiku 4.5**
+(não Sonnet). Contexto: cogitou-se trocar para Groq (modelos abertos,
+infra própria, tokens mais baratos) por preocupação de custo, já que o
+plano Pro não inclui créditos de API. Descartado depois de comparar preço
+real por análise, não só por MTok:
+- Uma análise de fit (~2.500 tokens de entrada — Profile + vaga — e ~500 de
+  saída) custa ~$0,005 no Haiku 4.5 ($1/$5 por MTok). Um crédito de €5
+  cobre mais de 1.000 análises — muito acima do volume real de uma busca de
+  emprego pessoal (dezenas a poucas centenas de vagas). O medo de custo
+  fazia sentido pensando em Sonnet (~4-5x mais caro), não em Haiku.
+- A vantagem central do Groq é velocidade de inferência, que não entrega
+  nada aqui: a F02 é um processo assíncrono de backend (coletor ou uso
+  manual chamando um endpoint), não uma UI de chat esperando tokens em
+  tempo real.
+- O risco nomeado no próprio protocolo de análise (nunca inventar evidência
+  que não está no Profile) é uma questão de fidelidade/instrução, dimensão
+  em que os modelos da Anthropic têm histórico mais forte do que os modelos
+  abertos hospedados no Groq — não validado com benchmark próprio, é
+  julgamento, mas é o motivo de não trocar sem necessidade comprovada.
+- Reforça a decisão abaixo (segunda camada de LLM como revisor fora do
+  escopo do v1): com uma só chamada por análise, e não duas, o custo real
+  fica ainda mais baixo do que a conta inicial.
+
 **Frente no contrato de entrada: decidido (2026-09-29).** `frente` é
 parâmetro **obrigatório** (`COMEX` ou `TECH`), não inferência livre da
 Claude. Motivo: tanto o coletor quanto o uso manual já sabem a frente da
@@ -287,8 +310,11 @@ normalizado), `vagaUrl` em coluna própria, UNIQUE
 **Fora do escopo do v1:** segunda camada de LLM como revisor (gatilho: mais de
 3 discordâncias em 15 vagas de teste, ou `revisar` acima de ~30% — reavaliado
 em 2026-09-29 e mantido fora de escopo conscientemente: ainda não há dado de
-uso real pra saber se algum gatilho dispara; adiado, não esquecido), F03,
-guardar o texto da vaga, **geração de CV adaptado (vira F04, ver abaixo)**.
+uso real pra saber se algum gatilho dispara; adiado, não esquecido;
+**reconfirmado em 2026-09-30** ao decidir o provedor de LLM — `revisar = true`
+continua sendo sinalização pra revisão humana, não gatilho de nova chamada),
+F03, guardar o texto da vaga, **geração de CV adaptado (vira F04, ver
+abaixo)**.
 
 ## F04 — Geração de CV
 
@@ -370,6 +396,7 @@ Boot trouxer ByteBuddy com suporte nativo a Java 25.
 5. Priorizar CI (GitHub Actions rodando `mvn test` em todo PR) — os PRs
    #13 e #14 só existiram porque não havia rede automática pegando esses
    erros antes do merge. Ver seção "Ambiente".
-6. Spec da F02, já contemplando o parâmetro `frente` e a checagem cruzada.
+6. Spec da F02, já contemplando o parâmetro `frente`, a checagem cruzada e o
+   provedor de LLM decidido (Claude Haiku 4.5).
 7. PRD do coletor e da F03.
 8. PRD da F04 (Geração de CV) — só depois da F02 implementada e em uso real.
