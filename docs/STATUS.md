@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade e cálculo puro (2026-09-30) |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade, cálculo puro e cliente Claude (2026-09-30, compilação confirmada) |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -251,10 +251,25 @@ experiência válida/inexistente/token malformado, referência nula/vazia,
 item fora da frente já filtrado). `mvn test` local (Codespaces, 2026-09-30):
 **36/36 passando** (16 novos da F02 + 20 já existentes da F01).
 
-**Ainda faltam (passos 4-6 da Spec):** `FitAnalysisClient` +
-implementação com o SDK da Anthropic (só depois de ter a chave de API),
-`MatchService` juntando filtro por frente + dedup + verificação + cálculo,
-e `MatchController` + DTOs.
+**Implementação — passo 4 da Spec (seção 9), 2026-09-30.**
+`FitAnalysisClient` (interface) + `FitAnalysisRequest`/`FitAnalysisResult`
++ `FitAnalysisException` + `ClaudeFitAnalysisClient` (implementação real,
+SDK `com.anthropic:anthropic-java`, *tool use*, prompt com tokens
+`skill:<nome>`/`exp:<id>`). Properties `fitanalizer.claude.*` no
+`application.yml` (`model`, `prompt-version`, `timeout-seconds`).
+
+**Risco assumido e resolvido:** a primeira versão tinha 2 erros de
+compilação (`tools(List<Tool>)` → precisa `ToolUnion.ofTool(...)`;
+`toolUse.input()` → accessor correto é `toolUse._input()`), reportados
+pelo Everson (`mvn compile` no Codespaces) e corrigidos consultando o
+código-fonte real do SDK no GitHub. **`mvn compile` confirmado: BUILD
+SUCCESS (2026-09-30).** Nenhum teste automatizado para esta classe ainda,
+de propósito — só faz sentido depois de ter a chave de API pra validar
+com uma chamada real.
+
+**Ainda faltam (passos 5-6 da Spec), aguardando confirmação de que o
+passo 4 compila:** `MatchService` juntando filtro por frente + dedup +
+verificação + cálculo, e `MatchController` + DTOs.
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
