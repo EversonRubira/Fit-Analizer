@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Não iniciada |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade e cálculo puro (2026-09-30) |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -230,6 +230,31 @@ Documentos: `docs/prd/F02-fit-matching.md`, `docs/specs/F02-fit-matching.md`
 - Causa do `revisar = true` fica só em log estruturado (SLF4J), não em
   coluna nova — gatilho de revisão: promover a coluna se precisar
   consultar por API em vez de grep.
+
+**Implementação — passos 1-3 da Spec (seção 9), 2026-09-30.** Entidade
+`MatchResult` (+ `RequisitoClassificado`, `GapRisco`, `Classificacao`,
+`Decisao`) e `MatchResultRepository`, mais a lógica pura e testável sem
+nenhuma dependência externa: `AderenciaCalculadora` (cálculo de
+`aderenciaPct`, arredondamento pra baixo, zonas de fronteira) e
+`VerificadorEvidencia` (tokens `skill:<nome>`/`exp:<id>`, Spec seção 3.1).
+Pacote `com.fitanalizer.match`, mesmo estilo da F01 (getters/setters
+explícitos, sem Lombok). `MatchResult.aplicarAnalise(...)` concentra num
+único método toda mutação dos campos derivados de uma análise — mesmo
+método serve para a primeira análise e para a reanálise (Spec, seção
+6.3/7), evitando setters soltos que permitiriam atualização parcial
+inconsistente.
+
+Testes unitários cobrindo limites exatos das faixas de decisão,
+arredondamento pra baixo, todas as zonas de fronteira, e os casos de
+`VerificadorEvidencia` (skill válida/case-insensitive/inexistente,
+experiência válida/inexistente/token malformado, referência nula/vazia,
+item fora da frente já filtrado). `mvn test` local (Codespaces, 2026-09-30):
+**36/36 passando** (16 novos da F02 + 20 já existentes da F01).
+
+**Ainda faltam (passos 4-6 da Spec):** `FitAnalysisClient` +
+implementação com o SDK da Anthropic (só depois de ter a chave de API),
+`MatchService` juntando filtro por frente + dedup + verificação + cálculo,
+e `MatchController` + DTOs.
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
