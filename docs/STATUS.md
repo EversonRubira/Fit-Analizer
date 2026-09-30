@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Em andamento — entidade, cálculo puro e cliente Claude (2026-09-30, compilação confirmada) |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Todos os passos da Spec implementados (2026-09-30), aguardando `mvn test` local |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -267,9 +267,31 @@ SUCCESS (2026-09-30).** Nenhum teste automatizado para esta classe ainda,
 de propósito — só faz sentido depois de ter a chave de API pra validar
 com uma chamada real.
 
-**Ainda faltam (passos 5-6 da Spec), aguardando confirmação de que o
-passo 4 compila:** `MatchService` juntando filtro por frente + dedup +
-verificação + cálculo, e `MatchController` + DTOs.
+**Implementação — passos 5-6 da Spec (seção 9), 2026-09-30.**
+`MatchService` (filtro por frente, dedup com `saveAndFlush` +
+`DataIntegrityViolationException` pra concorrência, verificação de
+evidência, cálculo, marca `revisar` com causas logadas) + `MatchController`
+(`POST /matches`, 201/200/400/404/502) + DTOs (`MatchRequest`,
+`MatchResponse`, `RequisitoResponse`, `GapRiscoResponse`).
+
+**Detalhe técnico que vale registrar:** o dedup usa `saveAndFlush`, não
+`save`. Com `save()` simples o Hibernate adia a escrita (write-behind) até
+o fim da transação — a violação da UNIQUE só apareceria depois do método
+já ter retornado, e o `try/catch` de concorrência nunca pegaria nada.
+`saveAndFlush` força o INSERT/UPDATE real ali, dentro do `try`.
+
+Testes unitários (`MatchServiceTest`, Mockito): frente TRANSVERSAL rejeitada
+sem buscar Profile, owner sem Profile sem chamar Claude, dedup com/sem
+reanalisar, filtro por frente confirmado via `ArgumentCaptor` (skill/
+experiência de outra frente não vai no prompt), vaga sem requisitos
+(inconclusiva), evidência inventada (rebaixamento + revisar), frente
+divergente (revisar sem afetar o cálculo). Web-slice (`MatchControllerTest`):
+201, 200 (dedup), 400 (validação e frente inválida), 404, 502.
+
+**Não executado neste ambiente** (mesma limitação de sempre) — rodar
+`mvn test` localmente. Com isso, **todos os passos da ordem sugerida na
+Spec (seção 9) estão implementados**; falta validar compilação/testes e,
+depois, uma chamada real (crédito da Claude API).
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
