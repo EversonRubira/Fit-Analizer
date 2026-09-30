@@ -6,6 +6,7 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.Tool;
 import com.anthropic.models.messages.ToolChoiceTool;
+import com.anthropic.models.messages.ToolUnion;
 import com.anthropic.models.messages.ToolUseBlock;
 import com.anthropic.core.JsonValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,16 +25,16 @@ import org.springframework.stereotype.Component;
  * SDK oficial (Spec F02, seção 1.1). Forma a resposta como *tool use*
  * (seção 3.2), não como "responda em JSON" em texto livre.
  *
- * <p><b>Aviso desta implementação:</b> a construção do {@link Tool}/schema e
- * a leitura do {@link ToolUseBlock} da resposta (métodos privados no fim da
- * classe) foram escritas com base na documentação pública do SDK
- * (<a href="https://github.com/anthropics/anthropic-sdk-java">anthropic-sdk-java</a>),
- * sem poder compilar contra a versão real da dependência neste ambiente
- * (sandbox sem acesso ao Maven Central — mesma limitação já registrada no
- * STATUS.md). Os nomes exatos dos métodos do builder podem divergir da
- * versão que o Maven baixar. Se `mvn compile` falhar aqui, me manda o erro
- * — é provável que seja só um nome de método pra ajustar, não um problema
- * de desenho.
+ * <p><b>Histórico de verificação:</b> a primeira versão desta classe (PR
+ * #18) tinha dois erros de compilação — {@code tools(List<Tool>)} em vez de
+ * {@code tools(List<ToolUnion>)} (union precisa de {@code ToolUnion.ofTool(...)})
+ * e {@code toolUse.input()} em vez de {@code toolUse._input()} (accessor com
+ * underscore, padrão do SDK pra campos {@code JsonValue}) — confirmados
+ * contra o código-fonte real do SDK depois do erro reportado pelo Everson,
+ * e corrigidos. O restante (construção do {@code Tool.InputSchema},
+ * {@code .apiKey(...)}/{@code .timeout(...)} do client, {@code .model(String)})
+ * segue sem confirmação por compilação real neste ambiente (sandbox sem
+ * Maven Central) — se `mvn compile` falhar de novo, mandar o erro.
  */
 @Component
 public class ClaudeFitAnalysisClient implements FitAnalysisClient {
@@ -69,7 +70,7 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                     .maxTokens(4096L)
                     .system(montarPrompt(request))
                     .addUserMessage(request.textoVaga())
-                    .tools(List.of(construirFerramenta()))
+                    .tools(List.of(ToolUnion.ofTool(construirFerramenta())))
                     .toolChoice(ToolChoiceTool.builder().name(NOME_FERRAMENTA).build())
                     .build();
 
@@ -160,7 +161,7 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
 
     private FitAnalysisResult converter(ToolUseBlock toolUse) {
         try {
-            ClaudeToolResponse resposta = objectMapper.readValue(toolUse.input().toString(), ClaudeToolResponse.class);
+            ClaudeToolResponse resposta = objectMapper.readValue(toolUse._input().toString(), ClaudeToolResponse.class);
             List<RequisitoClassificado> requisitos = resposta.requisitos().stream()
                     .map(r -> new RequisitoClassificado(r.descricao(), Classificacao.valueOf(r.classificacao().toUpperCase()),
                             r.evidenciaRef()))
