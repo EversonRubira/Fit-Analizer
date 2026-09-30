@@ -22,6 +22,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class MatchServiceTest {
@@ -39,8 +43,17 @@ class MatchServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MatchService(matchResultRepository, profileRepository, fitAnalysisClient, "claude-haiku-4-5",
-                "v1");
+        // Nos testes unitários não há banco: este template só executa o callback
+        // direto, sem transação real. O comportamento transacional de verdade é
+        // coberto por MatchDedupIntegrationTest (Postgres real).
+        TransactionTemplate semTransacao = new TransactionTemplate() {
+            @Override
+            public <T> T execute(TransactionCallback<T> action) {
+                return action.doInTransaction(new SimpleTransactionStatus());
+            }
+        };
+        service = new MatchService(matchResultRepository, profileRepository, fitAnalysisClient, semTransacao,
+                "claude-haiku-4-5", "v1");
     }
 
     private Profile perfilComSkillTech() {
@@ -177,5 +190,25 @@ class MatchServiceTest {
         assertThat(resultado.analiseNova()).isTrue();
         assertThat(resultado.matchResult()).isSameAs(existente); // mesma linha, não uma nova
         verify(fitAnalysisClient).analisar(any());
+    }
+
+    @Test
+    void violacaoDaUniqueNaGravacaoDevolveOResultadoDaOutraRequisicao() {
+        Profile profile = perfilComSkillTech();
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        MatchResult salvoPelaOutra = new MatchResult(profile, Frente.TECH, "https://vaga.example/1",
+                "https://vaga.example/1");
+        // 1ª consulta (etapa 1): ainda não existe. 2ª (recuperação): a outra requisição já salvou.
+        when(matchResultRepository.findByProfileAndVagaChave(profile, "https://vaga.example/1"))
+                .thenReturn(Optional.empty(), Optional.of(salvoPelaOutra));
+        when(fitAnalysisClient.analisar(any()))
+                .thenReturn(new FitAnalysisResult(Frente.TECH, List.of(), List.of()));
+        when(matchResultRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uk"));
+
+        AnaliseResultado resultado = service.analisar("everson", "texto", Frente.TECH, "https://vaga.example/1",
+                false);
+
+        assertThat(resultado.analiseNova()).isFalse();
+        assertThat(resultado.matchResult()).isSameAs(salvoPelaOutra);
     }
 }
