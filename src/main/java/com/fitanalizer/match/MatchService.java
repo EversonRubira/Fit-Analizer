@@ -20,12 +20,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Junta o que o PRD/Spec da F02 divide entre Claude (julgamento) e código
  * (todo o resto): filtro por frente, dedup, verificação de evidência,
  * cálculo de aderência, faixa de decisão e marca de revisão.
+ *
+ * <p><b>Transações:</b> {@link #analisar} deliberadamente NÃO é {@code @Transactional}.
+ * Ele roda em três etapas: (1) transação curta de leitura + checagem de dedup;
+ * (2) chamada à Claude API e cálculos, sem transação e sem conexão de banco
+ * presa; (3) transação curta só para gravar. Se a gravação violar a UNIQUE
+ * (duas requisições simultâneas da mesma vaga), o Postgres aborta a transação
+ * e a sessão do Hibernate fica inutilizável — por isso a recuperação (ler o
+ * que a outra requisição salvou) acontece numa transação NOVA, fora da que
+ * falhou.
  */
 @Service
 public class MatchService {
@@ -35,53 +44,84 @@ public class MatchService {
     private final MatchResultRepository matchResultRepository;
     private final ProfileRepository profileRepository;
     private final FitAnalysisClient fitAnalysisClient;
+    private final TransactionTemplate transactionTemplate;
     private final String modelo;
     private final String versaoPrompt;
 
     public MatchService(MatchResultRepository matchResultRepository, ProfileRepository profileRepository,
-            FitAnalysisClient fitAnalysisClient,
+            FitAnalysisClient fitAnalysisClient, TransactionTemplate transactionTemplate,
             @Value("${fitanalizer.claude.model}") String modelo,
             @Value("${fitanalizer.claude.prompt-version}") String versaoPrompt) {
         this.matchResultRepository = matchResultRepository;
         this.profileRepository = profileRepository;
         this.fitAnalysisClient = fitAnalysisClient;
+        this.transactionTemplate = transactionTemplate;
         this.modelo = modelo;
         this.versaoPrompt = versaoPrompt;
     }
 
-    @Transactional
     public AnaliseResultado analisar(String owner, String textoVaga, Frente frente, String vagaUrl,
             boolean reanalisar) {
         if (frente == Frente.TRANSVERSAL) {
             throw new FrenteInvalidaException(frente);
         }
 
+        // Etapa 1 — transação curta: profile + dedup.
+        Preparo preparo = transactionTemplate
+                .execute(status -> preparar(owner, textoVaga, frente, vagaUrl, reanalisar));
+        if (preparo.dedup() != null) {
+            return preparo.dedup();
+        }
+
+        // Etapa 2 — sem transação: chamada à Claude (até 60s) e cálculos puros.
+        Calculo calculo = calcular(owner, preparo, textoVaga, frente);
+
+        // Etapa 3 — transação curta só para gravar.
+        try {
+            return transactionTemplate.execute(status -> gravar(preparo, frente, vagaUrl, reanalisar, calculo));
+        } catch (DataIntegrityViolationException e) {
+            // Concorrência (PRD F02, seção 6.2): outra requisição da mesma vaga
+            // salvou entre a etapa 1 e a etapa 3. A transação da etapa 3 já foi
+            // descartada; esta leitura roda numa transação nova e limpa. Devolve
+            // o que a outra salvou, não erro — o coletor precisa de idempotência.
+            return transactionTemplate.execute(status -> matchResultRepository
+                    .findByProfileAndVagaChave(preparo.profile(), preparo.vagaChave())
+                    .map(jaSalvo -> concluir(jaSalvo, false))
+                    .orElseThrow(() -> e));
+        }
+    }
+
+    private Preparo preparar(String owner, String textoVaga, Frente frente, String vagaUrl, boolean reanalisar) {
         Profile profile = profileRepository.findByOwner(owner)
                 .orElseThrow(() -> new ProfileNotFoundException(owner));
         // Mesmo achado da F01 (Spec, seção 2.3): coleções LAZY precisam ser
-        // inicializadas ainda dentro da transação.
+        // inicializadas ainda dentro da transação — aqui, porque a etapa 2 usa
+        // o profile já fora dela.
         Hibernate.initialize(profile.getSkills());
         Hibernate.initialize(profile.getHistoricoProfissional());
 
         String vagaChave = calcularVagaChave(textoVaga, vagaUrl);
-        Optional<MatchResult> existente = matchResultRepository.findByProfileAndVagaChave(profile, vagaChave);
 
-        if (existente.isPresent() && !reanalisar) {
-            // Dedup: nenhuma chamada à Claude API (PRD F02, seção 6.2).
-            return concluir(existente.get(), false);
+        if (!reanalisar) {
+            Optional<MatchResult> existente = matchResultRepository.findByProfileAndVagaChave(profile, vagaChave);
+            if (existente.isPresent()) {
+                // Dedup: nenhuma chamada à Claude API (PRD F02, seção 6.2).
+                return new Preparo(profile, vagaChave, List.of(), List.of(), concluir(existente.get(), false));
+            }
         }
 
-        List<Skill> skillsFiltrados = filtrarSkills(profile.getSkills(), frente);
-        List<ExperienciaProfissional> experienciasFiltradas = filtrarExperiencias(profile.getHistoricoProfissional(),
-                frente);
+        return new Preparo(profile, vagaChave, filtrarSkills(profile.getSkills(), frente),
+                filtrarExperiencias(profile.getHistoricoProfissional(), frente), null);
+    }
 
+    private Calculo calcular(String owner, Preparo preparo, String textoVaga, Frente frente) {
         FitAnalysisResult resultadoClaude = fitAnalysisClient
-                .analisar(new FitAnalysisRequest(textoVaga, skillsFiltrados, experienciasFiltradas));
+                .analisar(new FitAnalysisRequest(textoVaga, preparo.skills(), preparo.experiencias()));
 
         AtomicBoolean houveRebaixamento = new AtomicBoolean(false);
         List<RequisitoClassificado> requisitosVerificados = resultadoClaude.requisitos().stream()
-                .map(requisito -> verificar(requisito, skillsFiltrados, experienciasFiltradas, owner, vagaChave,
-                        houveRebaixamento))
+                .map(requisito -> verificar(requisito, preparo.skills(), preparo.experiencias(), owner,
+                        preparo.vagaChave(), houveRebaixamento))
                 .toList();
 
         boolean inconclusiva = requisitosVerificados.isEmpty();
@@ -97,30 +137,44 @@ public class MatchService {
                 || AderenciaCalculadora.zonaDeFronteira(aderenciaPct);
 
         if (revisar) {
-            logCausasRevisar(owner, vagaChave, inconclusiva, houveRebaixamento.get(), frenteDivergente, aderenciaPct);
+            logCausasRevisar(owner, preparo.vagaChave(), inconclusiva, houveRebaixamento.get(), frenteDivergente,
+                    aderenciaPct);
         }
 
-        MatchResult matchResult = existente.orElseGet(() -> new MatchResult(profile, frente, vagaChave, vagaUrl));
-        matchResult.aplicarAnalise(aderenciaPct, requisitosVerificados, gapsRiscos, decisao, revisar, versaoPrompt,
-                modelo, Instant.now());
+        return new Calculo(aderenciaPct, requisitosVerificados, gapsRiscos, decisao, revisar);
+    }
 
-        try {
-            // saveAndFlush, não save: a violação da UNIQUE só é detectada no
-            // INSERT/UPDATE real contra o banco. Com save() simples, o Hibernate
-            // adia a escrita até o fim da transação (write-behind) — o
-            // try/catch aqui embaixo não pegaria nada, porque o erro só
-            // aconteceria depois deste método já ter retornado.
-            matchResultRepository.saveAndFlush(matchResult);
-        } catch (DataIntegrityViolationException e) {
-            // Concorrência (PRD F02, seção 6.2): outra requisição da mesma vaga
-            // já salvou entre o findByProfileAndVagaChave e este save. Devolve
-            // o que ela salvou, não erro — o coletor precisa de idempotência.
-            MatchResult jaSalvo = matchResultRepository.findByProfileAndVagaChave(profile, vagaChave)
-                    .orElseThrow(() -> e);
-            return concluir(jaSalvo, false);
-        }
+    private AnaliseResultado gravar(Preparo preparo, Frente frente, String vagaUrl, boolean reanalisar,
+            Calculo calculo) {
+        Profile profile = preparo.profile();
+        String vagaChave = preparo.vagaChave();
 
+        // Reanálise sobrescreve a mesma linha (Spec F02, seção 6.3). Sem reanálise
+        // sempre INSERT: quem arbitra uma corrida é a UNIQUE do banco, não um
+        // "já existe?" que ficaria velho entre a etapa 1 e esta.
+        MatchResult matchResult = reanalisar
+                ? matchResultRepository.findByProfileAndVagaChave(profile, vagaChave)
+                        .orElseGet(() -> new MatchResult(profile, frente, vagaChave, vagaUrl))
+                : new MatchResult(profile, frente, vagaChave, vagaUrl);
+        matchResult.aplicarAnalise(calculo.aderenciaPct(), calculo.requisitos(), calculo.gapsRiscos(),
+                calculo.decisao(), calculo.revisar(), versaoPrompt, modelo, Instant.now());
+
+        // saveAndFlush, não save: a violação da UNIQUE só é detectada no
+        // INSERT/UPDATE real contra o banco. Com save() simples, o Hibernate
+        // pode adiar a escrita até o commit — e o erro escaparia do
+        // transactionTemplate.execute() sem passar pelo catch de quem chamou.
+        matchResultRepository.saveAndFlush(matchResult);
         return concluir(matchResult, true);
+    }
+
+    /** O que a etapa 1 entrega para as etapas seguintes ({@code dedup} != null encerra o fluxo). */
+    private record Preparo(Profile profile, String vagaChave, List<Skill> skills,
+            List<ExperienciaProfissional> experiencias, AnaliseResultado dedup) {
+    }
+
+    /** Resultado da etapa 2 (Claude + verificação + cálculo), pronto para gravar. */
+    private record Calculo(int aderenciaPct, List<RequisitoClassificado> requisitos, List<GapRisco> gapsRiscos,
+            Decisao decisao, boolean revisar) {
     }
 
     private AnaliseResultado concluir(MatchResult matchResult, boolean analiseNova) {
