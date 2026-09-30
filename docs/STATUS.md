@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Não iniciada | Não iniciada |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Não iniciada |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -207,8 +207,29 @@ responsabilidade da borda HTTP, não do Service.
 
 ## F02 — Fit Matching
 
-Documento: `docs/prd/F02-fit-matching.md`. Spec e implementação não iniciadas;
-dependem da F01 completa.
+Documentos: `docs/prd/F02-fit-matching.md`, `docs/specs/F02-fit-matching.md`
+(**Spec concluída em 2026-09-30**). Implementação não iniciada.
+
+**Decisões fechadas na Spec, além do que já estava no PRD:**
+- SDK oficial da Anthropic para Java (`com.anthropic:anthropic-java`), não
+  HTTP cru — única exceção à regra de "sem dependência nova sem fricção
+  real" porque a integração (autenticação, *tool use*) é complexidade
+  recorrente, não pontual.
+- `requisitos`/`gapsRiscos` como `@ElementCollection`/`@Embeddable` (mesmo
+  padrão da F01), não coluna JSON — sem dependência nova.
+- `evidencia_ref` usa tokens explícitos (`skill:<nome>`, `exp:<id>`) em vez
+  de texto livre reescrito pela Claude — vira checagem de pertencimento a
+  conjunto, não comparação fuzzy de string; evita falso positivo de
+  alucinação por paráfrase.
+- Saída da Claude via *tool use* (schema JSON forçado), não "responda em
+  JSON" em texto livre.
+- Endpoint único `POST /matches`, 201 (análise nova/reanalisada) vs 200
+  (dedup, resultado existente devolvido) — diferenciação pensada
+  especificamente pra fase de teste manual com crédito real.
+- Falha da Claude API → 502 (erro de dependência externa), não 500.
+- Causa do `revisar = true` fica só em log estruturado (SLF4J), não em
+  coluna nova — gatilho de revisão: promover a coluna se precisar
+  consultar por API em vez de grep.
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
@@ -396,7 +417,10 @@ Boot trouxer ByteBuddy com suporte nativo a Java 25.
 5. Priorizar CI (GitHub Actions rodando `mvn test` em todo PR) — os PRs
    #13 e #14 só existiram porque não havia rede automática pegando esses
    erros antes do merge. Ver seção "Ambiente".
-6. Spec da F02, já contemplando o parâmetro `frente`, a checagem cruzada e o
-   provedor de LLM decidido (Claude Haiku 4.5).
+6. ~~Spec da F02, já contemplando o parâmetro `frente`, a checagem cruzada e
+   o provedor de LLM decidido (Claude Haiku 4.5).~~ Concluída (2026-09-30),
+   `docs/specs/F02-fit-matching.md`. Próximo: implementação (ordem sugerida
+   na Spec, seção 9), depois de resolver a chave da Claude API (Everson vai
+   criar conta/crédito na Console).
 7. PRD do coletor e da F03.
 8. PRD da F04 (Geração de CV) — só depois da F02 implementada e em uso real.
