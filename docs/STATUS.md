@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Todos os passos da Spec implementados (2026-09-30), aguardando `mvn test` local |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Implementada e mergeada (PRs #19 e #20), 54/54 testes passando local e no CI; falta validar com chamada real à Claude API |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -208,7 +208,8 @@ responsabilidade da borda HTTP, não do Service.
 ## F02 — Fit Matching
 
 Documentos: `docs/prd/F02-fit-matching.md`, `docs/specs/F02-fit-matching.md`
-(**Spec concluída em 2026-09-30**). Implementação não iniciada.
+(**Spec concluída em 2026-09-30**). Implementação concluída e mergeada em
+2026-09-30 (PRs #19 e #20, ver abaixo).
 
 **Decisões fechadas na Spec, além do que já estava no PRD:**
 - SDK oficial da Anthropic para Java (`com.anthropic:anthropic-java`), não
@@ -288,10 +289,42 @@ experiência de outra frente não vai no prompt), vaga sem requisitos
 divergente (revisar sem afetar o cálculo). Web-slice (`MatchControllerTest`):
 201, 200 (dedup), 400 (validação e frente inválida), 404, 502.
 
-**Não executado neste ambiente** (mesma limitação de sempre) — rodar
-`mvn test` localmente. Com isso, **todos os passos da ordem sugerida na
-Spec (seção 9) estão implementados**; falta validar compilação/testes e,
-depois, uma chamada real (crédito da Claude API).
+**Validado (2026-09-30):** `mvn test` local (Codespaces) passou e a PR #19
+foi mergeada. **Todos os passos da ordem sugerida na Spec (seção 9) estão
+implementados.** Falta uma chamada real à Claude API (depende da chave e do
+crédito na Console) para validar o prompt e o *tool use* de ponta a ponta.
+
+**Teste de integração do dedup e correção de bug de concorrência
+(2026-09-30, PR #20).** O Mockito não consegue provar comportamento de
+banco, então o dedup ganhou `MatchDedupIntegrationTest`, contra um Postgres
+real via Testcontainers (nunca H2: o que se quer provar é a UNIQUE e o
+momento do flush no Postgres de verdade). Três casos: mesma vaga duas vezes
+(devolve o salvo, Claude chamada uma vez), UNIQUE recusando duplicata direto
+no repository, e duas requisições simultâneas da mesma vaga (1 linha, sem
+exceção). Os testes de concorrência não podem ser `@Transactional`: precisam
+de commits reais, com limpeza manual no `@AfterEach`.
+
+**Bug achado por esse teste:** o `catch (DataIntegrityViolationException)`
+do `MatchService` rodava **dentro da mesma transação que falhou**. No
+Postgres, depois de uma violação de constraint a transação aborta e a sessão
+do Hibernate fica inutilizável (`AssertionFailure: null id ... don't flush
+the Session after an exception occurs` ao reconsultar). Duas requisições
+simultâneas da mesma vaga davam erro em vez de devolver o resultado salvo.
+Os testes unitários com Mockito não podiam mostrar isso.
+
+**Correção:** `MatchService.analisar` deixou de ser `@Transactional` e roda
+em três etapas, via `TransactionTemplate`: (1) transação curta de leitura +
+checagem de dedup; (2) chamada à Claude e cálculos, **sem transação e sem
+conexão de banco presa** (antes, a chamada de até 60s segurava uma conexão);
+(3) transação curta só para gravar. Se a gravação violar a UNIQUE, só essa
+transação é descartada, e a leitura de recuperação roda numa transação nova.
+Sem reanálise, a etapa 3 sempre faz INSERT (quem arbitra a corrida é a
+UNIQUE, não um "já existe?" que ficaria velho); na reanálise, sobrescreve a
+mesma linha. **Consequência aceita:** numa corrida real, a Claude pode ser
+chamada duas vezes pela mesma vaga — a consistência (1 linha, sem erro) é
+garantida, custo zero não. A corrida só ocorre com requisições simultâneas
+da mesma vaga; o caso comum (coletor reenviando em execuções sucessivas) é
+coberto pela checagem prévia.
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
@@ -465,6 +498,22 @@ ByteBuddy tentar instrumentar mesmo numa JVM mais nova do que ele
 oficialmente testou. Remover essa flag quando uma versão futura do Spring
 Boot trouxer ByteBuddy com suporte nativo a Java 25.
 
+**Testes de integração e Docker (2026-09-30).** `MatchDedupIntegrationTest`
+precisa de Docker rodando. O Testcontainers do BOM do Spring Boot 3.3.4
+(1.19.8) usa uma API do Docker antiga que o **Docker Engine 29+ recusa**
+("client version 1.32 is too old"); o `pom.xml` sobrescreve
+`testcontainers.version` para **2.0.5**, que negocia a versão da API sozinha.
+Na 2.x os módulos foram renomeados (`testcontainers-junit-jupiter`,
+`testcontainers-postgresql`) e `PostgreSQLContainer` mudou de pacote.
+
+**CI (2026-09-30, PR #21).** `.github/workflows/ci.yml`: GitHub Actions roda
+`./mvnw test` (Java 21, Temurin, cache do Maven) em todo PR e em todo push
+para `main`, sem secrets (os testes mockam o `FitAnalysisClient`). O runner
+`ubuntu-latest` já tem Docker, então o Testcontainers funciona lá. Só há CI;
+não há CD porque a aplicação ainda não está hospedada em lugar nenhum.
+**Pendente (manual, só o dono do repo):** regra em Settings → Rules exigindo o
+check `test` antes de mergear em `main`; sem ela o CI avisa mas não bloqueia.
+
 ## Próximos passos (nesta ordem)
 
 1. ~~Validar o schema da F01 contra PostgreSQL real.~~ Feito.
@@ -476,13 +525,15 @@ Boot trouxer ByteBuddy com suporte nativo a Java 25.
    experiências.~~ Mergeado (PR #12), corrigido nos PRs #13 (ByteBuddy/JDK
    25) e #14 (comentário XML inválido no pom.xml), `mvn test` local:
    20/20 passando.
-5. Priorizar CI (GitHub Actions rodando `mvn test` em todo PR) — os PRs
-   #13 e #14 só existiram porque não havia rede automática pegando esses
-   erros antes do merge. Ver seção "Ambiente".
+5. ~~Priorizar CI (GitHub Actions rodando `mvn test` em todo PR).~~ Feito
+   (PR #21, 2026-09-30); os PRs #13 e #14 só existiram porque não havia
+   rede automática pegando esses erros antes do merge. **Falta a regra em
+   Settings → Rules exigindo o check `test`** (ver seção "Ambiente").
 6. ~~Spec da F02, já contemplando o parâmetro `frente`, a checagem cruzada e
    o provedor de LLM decidido (Claude Haiku 4.5).~~ Concluída (2026-09-30),
-   `docs/specs/F02-fit-matching.md`. Próximo: implementação (ordem sugerida
-   na Spec, seção 9), depois de resolver a chave da Claude API (Everson vai
-   criar conta/crédito na Console).
+   `docs/specs/F02-fit-matching.md`. **Implementação concluída e mergeada**
+   (PRs #19 e #20, 2026-09-30). Próximo: chamada real à Claude API
+   (Everson vai criar conta/crédito na Console) para validar prompt e
+   *tool use* de ponta a ponta.
 7. PRD do coletor e da F03.
 8. PRD da F04 (Geração de CV) — só depois da F02 implementada e em uso real.
