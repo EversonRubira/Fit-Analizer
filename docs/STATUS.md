@@ -248,9 +248,8 @@ Testes unitários cobrindo limites exatos das faixas de decisão,
 arredondamento pra baixo, todas as zonas de fronteira, e os casos de
 `VerificadorEvidencia` (skill válida/case-insensitive/inexistente,
 experiência válida/inexistente/token malformado, referência nula/vazia,
-item fora da frente já filtrado). **Não executado neste ambiente** — mesma
-limitação de rede já registrada (sandbox sem acesso ao Maven Central).
-Rodar `mvn test` localmente antes de mergear.
+item fora da frente já filtrado). `mvn test` local (Codespaces, 2026-09-30):
+**36/36 passando** (16 novos da F02 + 20 já existentes da F01).
 
 **Ainda faltam (passos 4-6 da Spec):** `FitAnalysisClient` +
 implementação com o SDK da Anthropic (só depois de ter a chave de API),
