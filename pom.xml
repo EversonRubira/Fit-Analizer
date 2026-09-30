@@ -19,6 +19,12 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Sobrescreve a versão do Testcontainers gerenciada pelo Spring Boot 3.3.4
+             (1.19.8). As 1.x usam uma API do Docker antiga que o Docker Engine 29+
+             recusa ("client version 1.32 is too old"); a 2.x negocia a versão da
+             API sozinha, sem depender de ~/.docker-java.properties em cada máquina.
+             Na 2.x os módulos foram renomeados (prefixo "testcontainers-"). -->
+        <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
 
     <dependencies>
@@ -53,16 +59,16 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Postgres real nos testes de integração do dedup (versão gerenciada
-             pelo BOM do Spring Boot, por isso sem <version>). -->
+        <!-- Postgres real nos testes de integração do dedup (versão vem da
+             propriedade testcontainers.version acima, via BOM do Spring Boot). -->
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

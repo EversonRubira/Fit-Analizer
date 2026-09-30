@@ -26,9 +26,9 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Prova, contra um Postgres real, o dedup "uma análise por (profile, vaga)".
@@ -50,7 +50,7 @@ class MatchDedupIntegrationTest {
 
     // static: um único container para a classe toda (subir Postgres a cada teste seria lento).
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine");
 
     // Aponta o DataSource da aplicação para o container. O schema é criado pelo
     // mesmo mecanismo da aplicação (ddl-auto: update, do application.yml).
