@@ -7,7 +7,7 @@
 | Item | PRD | Spec | Implementação |
 |---|---|---|---|
 | F01 — Cadastro de Perfil Técnico | Concluído | Concluída | Blocos 0, 1, 2 e 3 na main, testados (20/20, `mvn test` local); `Frente` mergeada e testada |
-| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Implementada e mergeada (PRs #19 e #20), 54/54 testes passando local e no CI; falta validar com chamada real à Claude API |
+| F02 — Fit Matching | Concluído | Concluída (2026-09-30) | Implementada, mergeada (PRs #19, #20 e #23) e validada com chamada real à Claude API (2026-10-01) |
 | F03 — Ranking | Não iniciado | — | — |
 | F04 — Geração de CV | Não iniciado | — | — |
 | Coletor de vagas (projeto externo) | Não iniciado | — | — |
@@ -44,6 +44,13 @@ Documentos: `docs/prd/F01-cadastro-perfil-tecnico.md`, `docs/specs/F01-cadastro-
   atual), não "campo vazio" — mesma ambiguidade seria resolvida com
   `Optional`/`JsonNullable`, mas não há caso de uso real hoje pra
   justificar essa complexidade. Detalhe na Spec, seção 2.5.
+- **Lacuna conhecida (achada em 2026-10-01):** a resposta do
+  `POST /profiles/{owner}/experiencias` devolve `"id": null`, porque o DTO é
+  montado antes de o Hibernate gravar (o id só nasce no INSERT). O dado está
+  certo no banco (`GET /profiles/{owner}` mostra o id), mas o cliente não
+  consegue editar nem apagar a experiência sem consultar o perfil antes.
+  Não afeta a F02 (o `/matches` recarrega o perfil do banco). Corrigir
+  quando o front precisar desse id.
 - **Estratégia de teste do Bloco 3:** teste orientado a risco, não cobertura
   de 100%. `ProfileServiceTest` (Mockito) continua cobrindo regra de
   negócio; `ProfileControllerTest` novo (`@WebMvcTest`/MockMvc) cobre só a
@@ -266,7 +273,8 @@ pelo Everson (`mvn compile` no Codespaces) e corrigidos consultando o
 código-fonte real do SDK no GitHub. **`mvn compile` confirmado: BUILD
 SUCCESS (2026-09-30).** Nenhum teste automatizado para esta classe ainda,
 de propósito — só faz sentido depois de ter a chave de API pra validar
-com uma chamada real.
+com uma chamada real. (Resolvido em 2026-10-01: ver "Primeira chamada
+real" abaixo.)
 
 **Implementação — passos 5-6 da Spec (seção 9), 2026-09-30.**
 `MatchService` (filtro por frente, dedup com `saveAndFlush` +
@@ -291,8 +299,39 @@ divergente (revisar sem afetar o cálculo). Web-slice (`MatchControllerTest`):
 
 **Validado (2026-09-30):** `mvn test` local (Codespaces) passou e a PR #19
 foi mergeada. **Todos os passos da ordem sugerida na Spec (seção 9) estão
-implementados.** Falta uma chamada real à Claude API (depende da chave e do
-crédito na Console) para validar o prompt e o *tool use* de ponta a ponta.
+implementados.** A chamada real à Claude API foi feita em 2026-10-01 (ver
+"Primeira chamada real" abaixo).
+
+**Primeira chamada real à Claude API (2026-10-01, PR #23).** Perfil
+fictício `teste` (3 skills TECH, 1 experiência COMEX) e uma vaga curta com 4
+requisitos obrigatórios (Java, Spring Boot, PostgreSQL, Kafka). Resultado:
+**HTTP 201, `aderenciaPct` 75, `cv_carta`, `revisar=false`**, Kafka como
+lacuna; repetindo a mesma chamada, **HTTP 200** com o mesmo `id` e o mesmo
+`analisadoEm`, sem nova chamada à API (dedup confirmado de ponta a ponta,
+com o Postgres e a API reais). O prompt e o *tool use* funcionaram sem
+ajuste; o custo é da ordem de meio centavo de dólar por análise (Haiku 4.5).
+
+**Dois bugs empilhados, invisíveis sem chamar a API de verdade.** A primeira
+tentativa deu 502 "fora do schema esperado", embora a Claude tivesse
+respondido certo. (1) O `ClaudeFitAnalysisClient` lia a entrada da ferramenta
+via `toString()` + Jackson, mas o `toString()` de um `JsonObject` do SDK
+imprime formato de Map do Java (`{chave=valor}`), que não é JSON. (2) Depois
+de corrigir isso, o Jackson interno do SDK (`JsonValue.convert`) não
+constrói *records* ("no Creators exist"). **Correção:** o SDK converte só
+para um `Map` simples e o `ObjectMapper` do projeto (com
+`FAIL_ON_UNKNOWN_PROPERTIES` desligado) monta o record. A causa real de uma
+falha de conversão passou a ser **logada** (antes só a mensagem genérica
+chegava ao Controller, e o 502 não dava pista nenhuma). Teste unitário novo
+(`ClaudeFitAnalysisClientTest`) cobre a conversão sem chamar a API.
+Lição: o segundo bug só apareceu depois de corrigir o primeiro; integração
+com serviço externo nunca exercitada tende a esconder mais de um problema.
+
+**Chave da Claude API (2026-10-01).** Chave dedicada ao projeto, criada no
+Console; guardada como **secret de Codespaces do próprio repositório**
+(Settings → Secrets and variables → Codespaces), nunca em arquivo do repo.
+O secret de usuário com o mesmo nome já existia e serve aos repositórios do
+curso da Alura (não inclui o Fit-Analizer), então foi deixado intacto. O SDK
+lê `ANTHROPIC_API_KEY` do ambiente.
 
 **Teste de integração do dedup e correção de bug de concorrência
 (2026-09-30, PR #20).** O Mockito não consegue provar comportamento de
@@ -532,8 +571,7 @@ check `test` antes de mergear em `main`; sem ela o CI avisa mas não bloqueia.
 6. ~~Spec da F02, já contemplando o parâmetro `frente`, a checagem cruzada e
    o provedor de LLM decidido (Claude Haiku 4.5).~~ Concluída (2026-09-30),
    `docs/specs/F02-fit-matching.md`. **Implementação concluída e mergeada**
-   (PRs #19 e #20, 2026-09-30). Próximo: chamada real à Claude API
-   (Everson vai criar conta/crédito na Console) para validar prompt e
-   *tool use* de ponta a ponta.
+   (PRs #19 e #20, 2026-09-30). **Chamada real à Claude API validada**
+   (2026-10-01, PR #23): 201 e 200 de dedup, ver seção F02.
 7. PRD do coletor e da F03.
 8. PRD da F04 (Geração de CV) — só depois da F02 implementada e em uso real.

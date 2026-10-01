@@ -11,7 +11,7 @@ do PRD da F01 antes de expor a API fora de um ambiente privado.
 | Feature | O que faz | Estado |
 |---|---|---|
 | F01 — Cadastro de Perfil Técnico | CRUD do perfil (skills, histórico profissional, bio) por `owner` | Implementada e testada |
-| F02 — Fit Matching | Analisa uma vaga contra o perfil via Claude API e persiste o resultado (`POST /matches`, com dedup por vaga) | Implementada e testada; falta validar com chamada real à Claude API |
+| F02 — Fit Matching | Analisa uma vaga contra o perfil via Claude API e persiste o resultado (`POST /matches`, com dedup por vaga) | Implementada, testada e validada com chamada real à Claude API |
 | F03 — Ranking | Consulta e ordena os resultados da F02 | Planejada |
 
 Um coletor de vagas (projeto separado) vai enviar vagas de APIs públicas de
@@ -67,6 +67,35 @@ O modelo pode ser trocado com `CLAUDE_MODEL` (padrão: `claude-haiku-4-5`).
 Segredos (senha do banco, chave da Claude API) ficam só em variáveis de
 ambiente, nunca em arquivos do repositório. `.env` e `application-local.*` já
 estão no `.gitignore`.
+
+## Teste manual da F02 (com a Claude API de verdade)
+
+Cada análise custa cerca de meio centavo de dólar (Haiku 4.5). Use sempre um
+perfil fictício, nunca dados reais.
+
+```bash
+# Postgres local (mesmos dados de acesso dos padrões acima)
+docker run -d --name fit-pg -e POSTGRES_USER=fit_analizer -e POSTGRES_PASSWORD=fit_analizer \
+  -e POSTGRES_DB=fit_analizer -p 5432:5432 postgres:16-alpine
+
+# A chave sem ficar no histórico do terminal; depois suba a aplicação
+read -s ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
+./mvnw spring-boot:run
+```
+
+Em outro terminal, cadastre um perfil e envie uma vaga:
+
+```bash
+curl -s -X POST localhost:8080/profiles -H 'Content-Type: application/json' \
+  -d '{"owner":"teste","bio":"Dev backend em formação."}'
+curl -s -X POST localhost:8080/profiles/teste/skills -H 'Content-Type: application/json' \
+  -d '{"nome":"Java","anosExperiencia":2,"frente":"TECH"}'
+curl -s -w '\nHTTP %{http_code}\n' -X POST localhost:8080/matches -H 'Content-Type: application/json' \
+  -d '{"owner":"teste","frente":"TECH","vagaUrl":"https://exemplo.com/vaga-1","textoVaga":"Backend Developer Java. Requisitos obrigatorios: Java, Kafka."}'
+```
+
+A primeira chamada responde **201**; repetir a mesma responde **200** com o
+mesmo resultado, sem nova chamada à API (dedup).
 
 ## Testes e CI
 
