@@ -9,6 +9,7 @@ import com.anthropic.models.messages.ToolChoiceTool;
 import com.anthropic.models.messages.ToolUnion;
 import com.anthropic.models.messages.ToolUseBlock;
 import com.anthropic.core.JsonValue;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitanalizer.profile.ExperienciaProfissional;
 import com.fitanalizer.profile.Frente;
@@ -17,6 +18,8 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -39,10 +42,16 @@ import org.springframework.stereotype.Component;
 @Component
 public class ClaudeFitAnalysisClient implements FitAnalysisClient {
 
+    private static final Logger log = LoggerFactory.getLogger(ClaudeFitAnalysisClient.class);
+
     private static final String NOME_FERRAMENTA = "classificar_fit";
 
+    // Jackson próprio (não o do SDK): sabe construir records. Tolera chaves extras
+    // na resposta; os valores continuam validados na conversão (enums, nulos).
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
     private final AnthropicClient client;
-    private final ObjectMapper objectMapper;
     private final String modelo;
     private final String versaoPrompt;
 
@@ -52,7 +61,6 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
             @Value("${fitanalizer.claude.timeout-seconds}") long timeoutSegundos) {
         this.modelo = modelo;
         this.versaoPrompt = versaoPrompt;
-        this.objectMapper = new ObjectMapper();
         // ANTHROPIC_API_KEY é lida do ambiente pelo próprio SDK (nunca hardcoded
         // aqui — Spec F02, seção 1.2). .timeout(...) não verificado por
         // compilação real, ver aviso no topo da classe.
@@ -75,7 +83,7 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                     .build();
 
             Message resposta = client.messages().create(params);
-            return converter(extrairEntradaDaFerramenta(resposta));
+            return converter(extrairEntradaDaFerramenta(resposta)._input());
         } catch (FitAnalysisException e) {
             throw e;
         } catch (Exception e) {
@@ -159,9 +167,25 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                 .orElseThrow(() -> new FitAnalysisException("A Claude não usou a ferramenta esperada na resposta"));
     }
 
-    private FitAnalysisResult converter(ToolUseBlock toolUse) {
+    /**
+     * Converte a entrada da ferramenta (JSON que a Claude preencheu) no nosso
+     * resultado. Package-private e estático para ser testado sem chamar a API.
+     *
+     * <p>Dois bugs da primeira chamada real (HTTP 502 "fora do schema") moldam
+     * este método. (1) NÃO usar {@code toString()} + Jackson: o {@code toString()}
+     * de um {@code JsonObject} imprime formato de Map do Java ({@code {chave=valor}}),
+     * que não é JSON válido. (2) NÃO converter direto para o record com
+     * {@code JsonValue.convert(Record.class)}: o Jackson interno do SDK não sabe
+     * construir records ("no Creators exist"). Por isso o SDK converte só para um
+     * Map simples, e o nosso {@link #MAPPER} monta o record a partir dele.
+     */
+    static FitAnalysisResult converter(JsonValue entrada) {
         try {
-            ClaudeToolResponse resposta = objectMapper.readValue(toolUse._input().toString(), ClaudeToolResponse.class);
+            Map<?, ?> mapa = entrada.convert(Map.class);
+            ClaudeToolResponse resposta = MAPPER.convertValue(mapa, ClaudeToolResponse.class);
+            if (resposta == null) {
+                throw new IllegalStateException("A conversão da entrada da ferramenta devolveu null");
+            }
             List<RequisitoClassificado> requisitos = resposta.requisitos().stream()
                     .map(r -> new RequisitoClassificado(r.descricao(), Classificacao.valueOf(r.classificacao().toUpperCase()),
                             r.evidenciaRef()))
@@ -171,12 +195,14 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                     .toList();
             return new FitAnalysisResult(Frente.valueOf(resposta.frenteDetectada()), requisitos, gapsRiscos);
         } catch (Exception e) {
+            // A causa real só aparece aqui: o Controller devolve apenas a mensagem.
+            log.error("Resposta da Claude fora do schema esperado. Entrada recebida: {}", entrada, e);
             throw new FitAnalysisException("Resposta da Claude fora do schema esperado", e);
         }
     }
 
     /** Espelha o schema pedido à Claude (seção acima) — só para desserialização via Jackson. */
-    private record ClaudeToolResponse(String frenteDetectada, List<RequisitoDto> requisitos,
+    record ClaudeToolResponse(String frenteDetectada, List<RequisitoDto> requisitos,
             List<GapRiscoDto> gapsRiscos) {
 
         record RequisitoDto(String descricao, String classificacao, String evidenciaRef) {
