@@ -35,6 +35,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * e a sessão do Hibernate fica inutilizável — por isso a recuperação (ler o
  * que a outra requisição salvou) acontece numa transação NOVA, fora da que
  * falhou.
+ *
+ * <p><b>NÃO anotar com {@code @Transactional} nem chamar de dentro de outra
+ * transação.</b> Os {@code TransactionTemplate} entrariam na transação externa
+ * e a releitura após violação de constraint quebraria.
  */
 @Service
 public class MatchService {
@@ -84,6 +88,8 @@ public class MatchService {
             // salvou entre a etapa 1 e a etapa 3. A transação da etapa 3 já foi
             // descartada; esta leitura roda numa transação nova e limpa. Devolve
             // o que a outra salvou, não erro — o coletor precisa de idempotência.
+            // Se a releitura não achar nada, não foi corrida de dedup: relança a
+            // exceção original (orElseThrow) em vez de mascará-la.
             return transactionTemplate.execute(status -> matchResultRepository
                     .findByProfileAndVagaChave(preparo.profile(), preparo.vagaChave())
                     .map(jaSalvo -> concluir(jaSalvo, false))

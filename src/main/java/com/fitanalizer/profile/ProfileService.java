@@ -3,6 +3,7 @@ package com.fitanalizer.profile;
 import java.time.LocalDate;
 import java.util.List;
 import org.hibernate.Hibernate;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,14 +34,38 @@ public class ProfileService {
             // MatchService.gravar.
             return repository.saveAndFlush(profile);
         } catch (DataIntegrityViolationException e) {
+            // Só a UNIQUE de owner significa "já existe" (409). Qualquer outra
+            // violação (NOT NULL, constraint futura) é outro problema e sobe como
+            // está, para não virar um 409 com mensagem enganosa.
+            if (!violouUniqueDoOwner(e)) {
+                throw e;
+            }
             // Corrida: outra requisição criou o mesmo owner entre o findByOwner
-            // acima e este INSERT; a UNIQUE uk_profiles_owner recusou. Mesmo
-            // significado do caminho rápido, mesma exceção (o controller devolve
-            // 409). Relançar uma RuntimeException faz o @Transactional dar
-            // rollback, que é o que queremos: a transação já está abortada no
-            // Postgres e não há nada a reler aqui, ao contrário do MatchService.
+            // acima e este INSERT. Mesmo significado do caminho rápido, mesma
+            // exceção. Não reler findByOwner aqui: após a violação o Postgres
+            // abortou a transação e qualquer query nela falharia. Relançar uma
+            // RuntimeException faz o @Transactional dar rollback.
             throw new ProfileAlreadyExistsException(owner);
         }
+    }
+
+    /**
+     * A exceção do Spring embrulha a do Hibernate, que embrulha a do driver.
+     * Caminho principal: a {@link ConstraintViolationException} do Hibernate já
+     * traz o nome da constraint extraído pelo dialeto do Postgres. Fallback, se
+     * ela não estiver na cadeia: procurar o nome na mensagem da causa raiz
+     * (no Postgres: {@code duplicate key ... constraint "uk_profiles_owner"}).
+     */
+    private static boolean violouUniqueDoOwner(DataIntegrityViolationException e) {
+        Throwable causaRaiz = e;
+        for (Throwable causa = e; causa != null; causa = causa.getCause()) {
+            if (causa instanceof ConstraintViolationException violacao && violacao.getConstraintName() != null) {
+                return Profile.UK_OWNER.equalsIgnoreCase(violacao.getConstraintName());
+            }
+            causaRaiz = causa;
+        }
+        String mensagem = causaRaiz.getMessage();
+        return mensagem != null && mensagem.contains(Profile.UK_OWNER);
     }
 
     @Transactional(readOnly = true)

@@ -7,9 +7,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,14 +45,44 @@ class ProfileServiceTest {
     }
 
     @Test
-    void criarDeveTraduzirViolacaoDaUniqueEmProfileAlreadyExists() {
+    void criarDeveTraduzirViolacaoDaUniqueDoOwnerEmProfileAlreadyExists() {
         // Por quê: é o caminho da corrida — findByOwner não viu ninguém, mas outra
         // requisição gravou antes; a UNIQUE recusa e o cliente deve ver 409, não 500.
+        // Mesma cadeia que o Spring monta de verdade: Spring -> Hibernate (com nome) -> driver.
         when(repository.findByOwner("everson")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uk_profiles_owner"));
+        when(repository.saveAndFlush(any())).thenThrow(violacao("uk_profiles_owner"));
 
         assertThatThrownBy(() -> service.criar("everson", "bio"))
                 .isInstanceOf(ProfileAlreadyExistsException.class);
+    }
+
+    @Test
+    void criarDeveRelancarViolacaoDeOutraConstraint() {
+        // Por quê: NOT NULL ou constraint futura não é "owner já existe";
+        // virar 409 esconderia o problema real atrás de uma mensagem enganosa.
+        DataIntegrityViolationException outra = violacao("profiles_bio_not_null");
+        when(repository.findByOwner("everson")).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any())).thenThrow(outra);
+
+        assertThatThrownBy(() -> service.criar("everson", "bio")).isSameAs(outra);
+    }
+
+    @Test
+    void criarSemConstraintViolationDoHibernateUsaMensagemDaCausaRaiz() {
+        // Por quê: cobre o fallback — se a exceção do Hibernate não vier na cadeia,
+        // o nome ainda é reconhecido na mensagem do driver.
+        when(repository.findByOwner("everson")).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("could not execute",
+                new SQLException("duplicate key value violates unique constraint \"uk_profiles_owner\"")));
+
+        assertThatThrownBy(() -> service.criar("everson", "bio"))
+                .isInstanceOf(ProfileAlreadyExistsException.class);
+    }
+
+    private static DataIntegrityViolationException violacao(String constraint) {
+        SQLException driver = new SQLException("violação da constraint " + constraint);
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("could not execute statement", driver, constraint));
     }
 
     @Test

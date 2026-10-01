@@ -120,6 +120,23 @@ class MatchServiceTest {
     }
 
     @Test
+    void violacaoNaGravacaoSemResultadoNaReleituraRelancaAExcecaoOriginal() {
+        // Por quê: a recuperação só vale para corrida de dedup (outra requisição
+        // salvou a mesma vaga). Se a releitura não acha nada, a violação foi de
+        // outra coisa e não pode ser mascarada como "resultado já existente".
+        Profile profile = perfilComSkillTech();
+        DataIntegrityViolationException original = new DataIntegrityViolationException("outra constraint");
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(matchResultRepository.findByProfileAndVagaChave(any(), any())).thenReturn(Optional.empty());
+        when(fitAnalysisClient.analisar(any())).thenReturn(new FitAnalysisResult(Frente.TECH,
+                List.of(new RequisitoClassificado("Java", Classificacao.FORTE, "skill:Java")), List.of()));
+        when(matchResultRepository.saveAndFlush(any())).thenThrow(original);
+
+        assertThatThrownBy(() -> service.analisar("everson", "texto", Frente.TECH, "https://vaga.example/1", false))
+                .isSameAs(original);
+    }
+
+    @Test
     void vagaSemRequisitosPersisteInconclusiva() {
         Profile profile = perfilComSkillTech();
         when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));

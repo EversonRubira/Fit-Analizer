@@ -44,6 +44,8 @@ public class MatchController {
         // Limite configurável, por isso fica aqui e não num @Size no DTO: anotação
         // só aceita constante de compilação, não lê propriedade. Roda antes do
         // Service, então um texto grande demais nunca chega à Claude API.
+        // Resposta 400 montada à mão, deve seguir o formato do ErrorResponse.
+        // Se ele mudar, atualizar aqui.
         if (request.textoVaga().length() > vagaMaxChars) {
             return ResponseEntity.badRequest().body(new ErrorResponse(
                     "textoVaga excede o limite de %d caracteres (recebido: %d)"
