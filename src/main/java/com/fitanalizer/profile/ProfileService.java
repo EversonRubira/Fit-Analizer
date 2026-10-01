@@ -3,6 +3,8 @@ package com.fitanalizer.profile;
 import java.time.LocalDate;
 import java.util.List;
 import org.hibernate.Hibernate;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,13 +19,53 @@ public class ProfileService {
 
     @Transactional
     public Profile criar(String owner, String bio) {
+        // Caminho rápido: cobre o caso comum (owner já cadastrado há tempo).
         repository.findByOwner(owner).ifPresent(profile -> {
             throw new ProfileAlreadyExistsException(owner);
         });
 
         Profile profile = new Profile(owner);
         profile.setBio(bio);
-        return repository.save(profile);
+        try {
+            // saveAndFlush, não save: o INSERT precisa ir ao banco AQUI, dentro do
+            // try. Com save(), o Hibernate pode adiar a escrita até o commit, que
+            // acontece no proxy do @Transactional, depois deste método retornar;
+            // a violação escaparia do catch e viraria 500. Mesmo motivo do
+            // MatchService.gravar.
+            return repository.saveAndFlush(profile);
+        } catch (DataIntegrityViolationException e) {
+            // Só a UNIQUE de owner significa "já existe" (409). Qualquer outra
+            // violação (NOT NULL, constraint futura) é outro problema e sobe como
+            // está, para não virar um 409 com mensagem enganosa.
+            if (!violouUniqueDoOwner(e)) {
+                throw e;
+            }
+            // Corrida: outra requisição criou o mesmo owner entre o findByOwner
+            // acima e este INSERT. Mesmo significado do caminho rápido, mesma
+            // exceção. Não reler findByOwner aqui: após a violação o Postgres
+            // abortou a transação e qualquer query nela falharia. Relançar uma
+            // RuntimeException faz o @Transactional dar rollback.
+            throw new ProfileAlreadyExistsException(owner);
+        }
+    }
+
+    /**
+     * A exceção do Spring embrulha a do Hibernate, que embrulha a do driver.
+     * Caminho principal: a {@link ConstraintViolationException} do Hibernate já
+     * traz o nome da constraint extraído pelo dialeto do Postgres. Fallback, se
+     * ela não estiver na cadeia: procurar o nome na mensagem da causa raiz
+     * (no Postgres: {@code duplicate key ... constraint "uk_profiles_owner"}).
+     */
+    private static boolean violouUniqueDoOwner(DataIntegrityViolationException e) {
+        Throwable causaRaiz = e;
+        for (Throwable causa = e; causa != null; causa = causa.getCause()) {
+            if (causa instanceof ConstraintViolationException violacao && violacao.getConstraintName() != null) {
+                return Profile.UK_OWNER.equalsIgnoreCase(violacao.getConstraintName());
+            }
+            causaRaiz = causa;
+        }
+        String mensagem = causaRaiz.getMessage();
+        return mensagem != null && mensagem.contains(Profile.UK_OWNER);
     }
 
     @Transactional(readOnly = true)

@@ -20,3 +20,7 @@ fitanalizer:
     # prompt (aciona o conjunto de regressão, PRD F02 seção 5).
     prompt-version: v1
     timeout-seconds: 60
+  match:
+    # Tamanho máximo do textoVaga em POST /matches (caracteres). Acima disso: 400,
+    # sem chamar a Claude API — protege contra custo e contra colar a página inteira.
+    vaga-max-chars: ${VAGA_MAX_CHARS:15000}

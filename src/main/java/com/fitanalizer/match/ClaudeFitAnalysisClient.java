@@ -62,11 +62,16 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
         this.modelo = modelo;
         this.versaoPrompt = versaoPrompt;
         // ANTHROPIC_API_KEY é lida do ambiente pelo próprio SDK (nunca hardcoded
-        // aqui — Spec F02, seção 1.2). .timeout(...) não verificado por
-        // compilação real, ver aviso no topo da classe.
+        // aqui — Spec F02, seção 1.2).
+        // maxRetries(0): sem retry automático (Spec F02). O padrão do SDK é 2, e
+        // cada retry reenvia a requisição inteira — com timeout de 60s, o pior
+        // caso viraria ~3 min e até 3 cobranças. Com 0, o primeiro erro ou
+        // timeout já sobe como exceção (confirmado no fonte do SDK 2.66.0:
+        // RetryingHttpClient desiste quando ++retries > maxRetries).
         this.client = AnthropicOkHttpClient.builder()
                 .apiKey(System.getenv("ANTHROPIC_API_KEY"))
                 .timeout(Duration.ofSeconds(timeoutSegundos))
+                .maxRetries(0)
                 .build();
     }
 

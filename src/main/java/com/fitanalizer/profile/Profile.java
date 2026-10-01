@@ -17,8 +17,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "profiles", uniqueConstraints = @UniqueConstraint(name = "uk_profiles_owner", columnNames = "owner"))
+@Table(name = "profiles", uniqueConstraints = @UniqueConstraint(name = Profile.UK_OWNER, columnNames = "owner"))
 public class Profile {
+
+    // Nome da UNIQUE de owner. Constante porque o ProfileService compara com ele
+    // para decidir se uma violação é "owner duplicado" (409); um só lugar evita
+    // que a anotação e a checagem divirjam.
+    static final String UK_OWNER = "uk_profiles_owner";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

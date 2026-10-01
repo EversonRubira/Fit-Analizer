@@ -104,9 +104,10 @@ mesmo resultado, sem nova chamada à API (dedup).
 ```
 
 Os testes não precisam de `ANTHROPIC_API_KEY` (o cliente da Claude é mockado),
-mas o `MatchDedupIntegrationTest` sobe um PostgreSQL real via Testcontainers,
-então **exige Docker rodando**. Com Docker Engine 29 ou mais novo, é preciso o
-Testcontainers 2.x, que o `pom.xml` já fixa.
+mas o `MatchDedupIntegrationTest` e o `ProfileConcorrenciaIntegrationTest`
+sobem um PostgreSQL real via Testcontainers, então **exigem Docker rodando**.
+Com Docker Engine 29 ou mais novo, é preciso o Testcontainers 2.x, que o
+`pom.xml` já fixa.
 
 O GitHub Actions (`.github/workflows/ci.yml`) roda `./mvnw test` em todo PR e
 em todo push para `main`.

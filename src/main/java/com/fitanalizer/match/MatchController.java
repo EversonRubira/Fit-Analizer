@@ -6,6 +6,7 @@ import com.fitanalizer.profile.ProfileNotFoundException;
 import com.fitanalizer.profile.dto.ErrorResponse;
 import jakarta.validation.Valid;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -30,13 +31,26 @@ import org.springframework.web.bind.annotation.RestController;
 public class MatchController {
 
     private final MatchService matchService;
+    private final int vagaMaxChars;
 
-    public MatchController(MatchService matchService) {
+    public MatchController(MatchService matchService,
+            @Value("${fitanalizer.match.vaga-max-chars}") int vagaMaxChars) {
         this.matchService = matchService;
+        this.vagaMaxChars = vagaMaxChars;
     }
 
     @PostMapping
     public ResponseEntity<?> analisar(@Valid @RequestBody MatchRequest request) {
+        // Limite configurável, por isso fica aqui e não num @Size no DTO: anotação
+        // só aceita constante de compilação, não lê propriedade. Roda antes do
+        // Service, então um texto grande demais nunca chega à Claude API.
+        // Resposta 400 montada à mão, deve seguir o formato do ErrorResponse.
+        // Se ele mudar, atualizar aqui.
+        if (request.textoVaga().length() > vagaMaxChars) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    "textoVaga excede o limite de %d caracteres (recebido: %d)"
+                            .formatted(vagaMaxChars, request.textoVaga().length())));
+        }
         try {
             AnaliseResultado resultado = matchService.analisar(request.owner(), request.textoVaga(),
                     request.frente(), request.vagaUrl(), Boolean.TRUE.equals(request.reanalisar()));
