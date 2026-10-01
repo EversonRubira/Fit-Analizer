@@ -439,6 +439,15 @@ normalizado), `vagaUrl` em coluna própria, UNIQUE
 - Endpoint síncrono, timeout de ~60s; em falha não persiste nada e não há
   retry automático (`maxRetries(0)` explícito no cliente do SDK, cujo padrão
   é 2 — até 2026-10-01 o SDK fazia até 2 retries sem a gente saber).
+- **Política de retry:** sem retry no cliente. Quando o coletor existir, o
+  retry com backoff é responsabilidade dele. Erros transitórios da Claude API
+  (429, 529, outros 5xx, timeout) chegam ao cliente HTTP como 502 com
+  `ErrorResponse`. O dedup do `MatchService` (UNIQUE `profile_id` +
+  `vaga_chave`) torna a repetição segura: depois que uma vaga foi analisada e
+  salva, reenviá-la não gera nova cobrança. Duas exceções conhecidas: numa
+  corrida (duas requisições simultâneas da mesma vaga) a Claude pode ser
+  chamada duas vezes (aceito, ver acima); e um timeout do nosso lado não
+  garante que a API não processou e cobrou aquela tentativa.
 - `textoVaga` acima de `fitanalizer.match.vaga-max-chars` (padrão 15000,
   env `VAGA_MAX_CHARS`) → 400, sem chamar a Claude API. Checado no
   Controller, não com `@Size`, porque anotação não lê propriedade.
@@ -446,6 +455,12 @@ normalizado), `vagaUrl` em coluna própria, UNIQUE
   F01 (409) porque o coletor precisa de idempotência.
 - Excluir um Profile apaga os `MatchResult` (delete explícito no Service da
   F02 — ver decisão abaixo, não cascata no banco).
+
+**Pendências de segurança (fora do PR de endurecimento, 2026-10-01)**
+- Autenticação com rate limit no `/matches`: hoje qualquer um que alcance a
+  API pode disparar análises e gastar crédito da Claude.
+- Delimitar o texto da vaga no prompt como dado, nunca como instrução
+  (proteção contra prompt injection vinda de vagas coletadas).
 
 **Decisões a confirmar na Spec**
 - **Mecanismo da cascata Profile → `MatchResult`: decidido (delete explícito
