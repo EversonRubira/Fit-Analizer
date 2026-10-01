@@ -9,6 +9,8 @@ import com.anthropic.models.messages.ToolChoiceTool;
 import com.anthropic.models.messages.ToolUnion;
 import com.anthropic.models.messages.ToolUseBlock;
 import com.anthropic.core.JsonValue;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitanalizer.profile.ExperienciaProfissional;
 import com.fitanalizer.profile.Frente;
 import com.fitanalizer.profile.Skill;
@@ -43,6 +45,11 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
     private static final Logger log = LoggerFactory.getLogger(ClaudeFitAnalysisClient.class);
 
     private static final String NOME_FERRAMENTA = "classificar_fit";
+
+    // Jackson próprio (não o do SDK): sabe construir records. Tolera chaves extras
+    // na resposta; os valores continuam validados na conversão (enums, nulos).
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private final AnthropicClient client;
     private final String modelo;
@@ -164,14 +171,18 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
      * Converte a entrada da ferramenta (JSON que a Claude preencheu) no nosso
      * resultado. Package-private e estático para ser testado sem chamar a API.
      *
-     * <p>Usa {@code JsonValue.convert(...)}, a conversão do próprio SDK, e NÃO
-     * {@code toString()} + Jackson: o {@code toString()} de um {@code JsonObject}
-     * imprime o formato de Map do Java ({@code {chave=valor}}), que não é JSON
-     * válido. Foi esse o bug da primeira chamada real (HTTP 502 "fora do schema").
+     * <p>Dois bugs da primeira chamada real (HTTP 502 "fora do schema") moldam
+     * este método. (1) NÃO usar {@code toString()} + Jackson: o {@code toString()}
+     * de um {@code JsonObject} imprime formato de Map do Java ({@code {chave=valor}}),
+     * que não é JSON válido. (2) NÃO converter direto para o record com
+     * {@code JsonValue.convert(Record.class)}: o Jackson interno do SDK não sabe
+     * construir records ("no Creators exist"). Por isso o SDK converte só para um
+     * Map simples, e o nosso {@link #MAPPER} monta o record a partir dele.
      */
     static FitAnalysisResult converter(JsonValue entrada) {
         try {
-            ClaudeToolResponse resposta = entrada.convert(ClaudeToolResponse.class);
+            Map<?, ?> mapa = entrada.convert(Map.class);
+            ClaudeToolResponse resposta = MAPPER.convertValue(mapa, ClaudeToolResponse.class);
             if (resposta == null) {
                 throw new IllegalStateException("A conversão da entrada da ferramenta devolveu null");
             }
