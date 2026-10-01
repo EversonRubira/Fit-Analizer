@@ -147,12 +147,17 @@ class MatchDedupIntegrationTest {
                     }));
             largada.countDown();
 
-            for (Future<AnaliseResultado> futuro : futuros) {
-                // get() relança qualquer exceção da thread: se o catch do Service não
-                // segurar a violação da UNIQUE, o teste falha aqui.
-                AnaliseResultado resultado = futuro.get(30, TimeUnit.SECONDS);
-                assertThat(resultado.matchResult().getVagaChave()).isEqualTo(vaga);
-            }
+            // get() relança qualquer exceção da thread: se o catch do Service não
+            // segurar a violação da UNIQUE, o teste falha aqui.
+            AnaliseResultado a = futuros.get(0).get(30, TimeUnit.SECONDS);
+            AnaliseResultado b = futuros.get(1).get(30, TimeUnit.SECONDS);
+
+            // Mesmo resultado para as duas: a que perdeu a corrida devolve o que a
+            // outra salvou (releitura em transação nova), não uma cópia própria.
+            assertThat(a.matchResult().getId()).isEqualTo(b.matchResult().getId());
+            assertThat(a.matchResult().getVagaChave()).isEqualTo(vaga);
+            // Exatamente uma é "análise nova" (201); a outra sai como já existente (200).
+            assertThat(List.of(a.analiseNova(), b.analiseNova())).containsExactlyInAnyOrder(true, false);
         } finally {
             pool.shutdownNow();
         }

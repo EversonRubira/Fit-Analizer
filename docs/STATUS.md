@@ -205,7 +205,11 @@ responsabilidade da borda HTTP, não do Service.
 **Decisões fechadas**
 - Camadas simples Controller → Service → Repository.
 - Unicidade de `owner`: verificação no Service + constraint UNIQUE no banco;
-  409 nos dois casos.
+  409 nos dois casos. (Até 2026-10-01 o caminho do banco dava 500: o `save()`
+  adiava o INSERT para o commit, fora de qualquer catch. Corrigido com
+  `saveAndFlush` + catch de `DataIntegrityViolationException` no `criar`,
+  mesmo padrão do `MatchService`; coberto por
+  `ProfileConcorrenciaIntegrationTest`.)
 - Tratamento de erro com try-catch por endpoint, sem `@ControllerAdvice`.
 - PATCH com DTO de campos opcionais (`null` = não alterar).
 - Skills via `@ElementCollection`; histórico via entidade própria
@@ -433,7 +437,11 @@ normalizado), `vagaUrl` em coluna própria, UNIQUE
 - Vaga sem requisitos obrigatórios persiste com 0%, `fora_escopo`,
   `revisar = true`.
 - Endpoint síncrono, timeout de ~60s; em falha não persiste nada e não há
-  retry automático.
+  retry automático (`maxRetries(0)` explícito no cliente do SDK, cujo padrão
+  é 2 — até 2026-10-01 o SDK fazia até 2 retries sem a gente saber).
+- `textoVaga` acima de `fitanalizer.match.vaga-max-chars` (padrão 15000,
+  env `VAGA_MAX_CHARS`) → 400, sem chamar a Claude API. Checado no
+  Controller, não com `@Size`, porque anotação não lê propriedade.
 - Concorrência: a segunda requisição devolve o resultado já salvo. Diverge da
   F01 (409) porque o coletor precisa de idempotência.
 - Excluir um Profile apaga os `MatchResult` (delete explícito no Service da

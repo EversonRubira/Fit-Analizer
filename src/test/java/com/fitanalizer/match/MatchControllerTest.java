@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -65,6 +66,39 @@ class MatchControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.decisao").value("CV_PRIORITARIO"));
+    }
+
+    @Test
+    void textoVagaAcimaDoLimiteDeveRetornar400SemChamarOService() throws Exception {
+        // Por quê: o limite existe para barrar custo antes da Claude API; se o
+        // Service fosse chamado, a proteção não estaria protegendo nada.
+        // 15001 = default de fitanalizer.match.vaga-max-chars (application.yml) + 1.
+        MatchRequest request = new MatchRequest("everson", "x".repeat(15_001), Frente.TECH,
+                "https://vaga.example/1", null);
+
+        mockMvc.perform(post("/matches")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("textoVaga excede o limite de 15000 caracteres (recebido: 15001)"));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void textoVagaExatamenteNoLimiteDeveSerAceito() throws Exception {
+        // Por quê: fixa a fronteira — o limite é inclusivo (15000 passa, 15001 não).
+        when(service.analisar(eq("everson"), anyString(), eq(Frente.TECH), any(), anyBoolean()))
+                .thenReturn(new AnaliseResultado(matchResultDeExemplo(), true));
+
+        MatchRequest request = new MatchRequest("everson", "x".repeat(15_000), Frente.TECH,
+                "https://vaga.example/1", null);
+
+        mockMvc.perform(post("/matches")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
     }
 
     @Test

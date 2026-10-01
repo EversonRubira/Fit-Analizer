@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,7 +39,18 @@ class ProfileServiceTest {
         assertThatThrownBy(() -> service.criar("everson", "bio"))
                 .isInstanceOf(ProfileAlreadyExistsException.class);
 
-        verify(repository, never()).save(any());
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void criarDeveTraduzirViolacaoDaUniqueEmProfileAlreadyExists() {
+        // Por quê: é o caminho da corrida — findByOwner não viu ninguém, mas outra
+        // requisição gravou antes; a UNIQUE recusa e o cliente deve ver 409, não 500.
+        when(repository.findByOwner("everson")).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uk_profiles_owner"));
+
+        assertThatThrownBy(() -> service.criar("everson", "bio"))
+                .isInstanceOf(ProfileAlreadyExistsException.class);
     }
 
     @Test

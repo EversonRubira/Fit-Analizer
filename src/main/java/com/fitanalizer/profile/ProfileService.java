@@ -3,6 +3,7 @@ package com.fitanalizer.profile;
 import java.time.LocalDate;
 import java.util.List;
 import org.hibernate.Hibernate;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,13 +18,29 @@ public class ProfileService {
 
     @Transactional
     public Profile criar(String owner, String bio) {
+        // Caminho rápido: cobre o caso comum (owner já cadastrado há tempo).
         repository.findByOwner(owner).ifPresent(profile -> {
             throw new ProfileAlreadyExistsException(owner);
         });
 
         Profile profile = new Profile(owner);
         profile.setBio(bio);
-        return repository.save(profile);
+        try {
+            // saveAndFlush, não save: o INSERT precisa ir ao banco AQUI, dentro do
+            // try. Com save(), o Hibernate pode adiar a escrita até o commit, que
+            // acontece no proxy do @Transactional, depois deste método retornar;
+            // a violação escaparia do catch e viraria 500. Mesmo motivo do
+            // MatchService.gravar.
+            return repository.saveAndFlush(profile);
+        } catch (DataIntegrityViolationException e) {
+            // Corrida: outra requisição criou o mesmo owner entre o findByOwner
+            // acima e este INSERT; a UNIQUE uk_profiles_owner recusou. Mesmo
+            // significado do caminho rápido, mesma exceção (o controller devolve
+            // 409). Relançar uma RuntimeException faz o @Transactional dar
+            // rollback, que é o que queremos: a transação já está abortada no
+            // Postgres e não há nada a reler aqui, ao contrário do MatchService.
+            throw new ProfileAlreadyExistsException(owner);
+        }
     }
 
     @Transactional(readOnly = true)
