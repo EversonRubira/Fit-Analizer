@@ -478,3 +478,69 @@ graph LR
 - **Retry automático** de chamadas à Claude API.
 - **Endpoint separado para o coletor.**
 - **Autenticação/autorização real** — mesmo risco aceito da F01.
+
+## 10. Decisões de 2026-10-02
+
+**Origem das vagas.**
+- A origem das vagas é **externa** ao Fit Analizer e pode ser manual (colar
+  o texto) ou um agente de IA com busca na web. O contrato do `/matches` não
+  muda: texto bruto da vaga + `owner` (com `frente`, `vagaUrl?` e
+  `reanalisar?`, como na seção 6.1).
+- O coletor como código próprio **deixa de ser planeado**. Só será
+  construído se colar vagas à mão virar fricção real.
+- O Fit Analizer continua sendo o **único** sistema com Profile, Claude API e
+  lógica de julgamento.
+
+**Escopo de uso.**
+- Uso pessoal, rodando só na máquina do dono. **Não** será hospedado nem
+  exposto na internet.
+- Por isso ficam fora de escopo: autenticação por chave de API, rate limit,
+  hospedagem em nuvem e migração urgente para Flyway. **Gatilho de
+  reabertura:** se o escopo mudar (hospedar, mostrar a terceiros), essas
+  decisões devem ser reabertas, e o `ddl-auto: update` revisto junto.
+- Cuidado mantido: limite mensal de gasto no console da Anthropic.
+- **Pendente:** configurar `server.address=127.0.0.1` (ainda não está no
+  `application.yml`).
+- **Descartado: RAG sobre o Profile.** O Profile cabe inteiro no prompt, e
+  RAG acrescentaria complexidade sem ganho. Reavaliar apenas se o Profile
+  crescer muito.
+
+**Processo de qualidade.**
+- Conjunto de regressão do prompt (`RegressaoPromptTest`, tag `regressao`,
+  5 casos reais com decisão esperada escrita à mão **antes** de rodar).
+  Regra: mudou o prompt ou o formato de saída, roda a regressão contra a API
+  real. Cada erro novo da Claude em vaga real vira um caso novo. As fixtures
+  versionadas contêm **apenas exemplos**; as versões reais ficam locais e
+  **nunca devem ser commitadas**. Pendência futura: mover as fixtures reais
+  para uma pasta no `.gitignore`, com o teste caindo para os exemplos quando
+  ela não existir.
+- Dedup considera a versão do prompt: análise salva com versão diferente (ou
+  sem versão) é reprocessada, sobrescrevendo a mesma linha. Subir
+  `prompt-version` **só quando o prompt mudar de verdade**, porque cada vaga
+  reenviada é cobrada de novo uma vez.
+- Lição do bug dos colchetes (PR #27): o cliente falso dos testes devolvia
+  tokens limpos e escondeu um bug real (aderência 0% em produção). Mudanças
+  no prompt ou no formato de saída da Claude precisam de **pelo menos uma
+  chamada real**.
+
+**Em aberto (hipótese, não decisão).**
+- Primeira rodada completa da regressão (2026-10-02, modelo
+  `claude-haiku-4-5`):
+
+  | caso | esperado | obtido | aderência |
+  |---|---|---|---|
+  | vaga-01 | `cv_carta` | `nao_candidatar` | 31% |
+  | vaga-02 | — | bateu | — |
+  | vaga-03 | — | bateu | — |
+  | vaga-04 | `nao_candidatar` | `cv_carta_com_aviso` | 63% |
+  | vaga-05 | `nao_candidatar` | `cv_carta` | 70% |
+
+- **Hipótese:** o prompt não pesa senioridade ("Senior") nem anos mínimos de
+  experiência (ex: "3+ anos de Java" contra 1 ano no Profile), e é duro
+  demais com requisitos subjetivos de atitude (vaga-01).
+- **Proposta a validar:** tratar senioridade e anos mínimos como filtro em
+  código, fora do LLM, comparando com os anos do Profile. Só entra neste PRD
+  como decisão depois de o diagnóstico das vagas 01 e 05 confirmar a causa e
+  a regressão validar a regra.
+- **Próximo passo:** diagnóstico com `-Dregressao.casos=vaga-01` e depois
+  `vaga-05`.
