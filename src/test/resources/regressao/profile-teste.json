@@ -1,0 +1,32 @@
+{
+  "_comentario": "Perfil FICTÍCIO e reduzido. Formato = o que o FitAnalysisClient recebe: listas já filtradas pela frente da vaga (+ TRANSVERSAL). O id das experiências é o que o prompt mostra como [exp:ID]. tecnologiasUsadas NÃO entra no prompt hoje.",
+  "skills": [
+    { "nome": "Java", "anosExperiencia": 3, "frente": "TECH" },
+    { "nome": "Spring Boot", "anosExperiencia": 2, "frente": "TECH" },
+    { "nome": "PostgreSQL", "anosExperiencia": 2, "frente": "TECH" },
+    { "nome": "JUnit", "anosExperiencia": 2, "frente": "TECH" },
+    { "nome": "Python", "anosExperiencia": 1, "frente": "TECH" },
+    { "nome": "Git", "anosExperiencia": 3, "frente": "TRANSVERSAL" },
+    { "nome": "Inglês", "anosExperiencia": 5, "frente": "TRANSVERSAL" }
+  ],
+  "experiencias": [
+    {
+      "id": 1,
+      "empresa": "Empresa Exemplo A",
+      "cargo": "Desenvolvedor Backend Júnior",
+      "frente": "TECH",
+      "dataInicio": "2024-01-01",
+      "dataFim": null,
+      "tecnologiasUsadas": ["Java", "Spring Boot", "PostgreSQL"]
+    },
+    {
+      "id": 2,
+      "empresa": "Empresa Exemplo B",
+      "cargo": "Estagiário de Desenvolvimento",
+      "frente": "TECH",
+      "dataInicio": "2023-01-01",
+      "dataFim": "2023-12-31",
+      "tecnologiasUsadas": ["Python", "Git"]
+    }
+  ]
+}

@@ -194,16 +194,15 @@ public class MatchService {
     private RequisitoClassificado verificar(RequisitoClassificado requisito, List<Skill> skills,
             List<ExperienciaProfissional> experiencias, String owner, String vagaChave,
             AtomicBoolean houveRebaixamento) {
-        if (requisito.getClassificacao() == Classificacao.NENHUM) {
-            return requisito;
+        // A regra mora no VerificadorEvidencia; aqui fica só o que depende do
+        // contexto da requisição: log com owner/vagaChave e a flag de revisar.
+        RequisitoClassificado verificado = VerificadorEvidencia.verificar(requisito, skills, experiencias);
+        if (verificado.getClassificacao() != requisito.getClassificacao()) {
+            houveRebaixamento.set(true);
+            log.warn("Alucinação detectada — owner={} vagaChave={} requisito=\"{}\" evidenciaRef={}", owner,
+                    vagaChave, requisito.getDescricao(), requisito.getEvidenciaRef());
         }
-        if (VerificadorEvidencia.referenciaValida(requisito.getEvidenciaRef(), skills, experiencias)) {
-            return requisito;
-        }
-        houveRebaixamento.set(true);
-        log.warn("Alucinação detectada — owner={} vagaChave={} requisito=\"{}\" evidenciaRef={}", owner, vagaChave,
-                requisito.getDescricao(), requisito.getEvidenciaRef());
-        return requisito.rebaixarParaNenhum();
+        return verificado;
     }
 
     private void logCausasRevisar(String owner, String vagaChave, boolean inconclusiva, boolean houveRebaixamento,

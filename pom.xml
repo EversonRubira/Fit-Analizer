@@ -25,6 +25,12 @@
              API sozinha, sem depender de ~/.docker-java.properties em cada máquina.
              Na 2.x os módulos foram renomeados (prefixo "testcontainers-"). -->
         <testcontainers.version>2.0.5</testcontainers.version>
+        <!-- Tags JUnit fora do `mvn test` normal. "regressao" chama a Claude API
+             real e gasta crédito (RegressaoPromptTest). Como propriedade, e não
+             fixo no plugin, para poder ser zerada na linha de comando:
+             ./mvnw test -Dgroups=regressao -DexcludedGroups= -Dtest=RegressaoPromptTest
+             Só -Dgroups=regressao não basta: a exclusão venceria e nada rodaria. -->
+        <excludedGroups>regressao</excludedGroups>
     </properties>
 
     <dependencies>

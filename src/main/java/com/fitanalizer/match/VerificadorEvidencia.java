@@ -23,6 +23,24 @@ public final class VerificadorEvidencia {
     }
 
     /**
+     * Regra de rebaixamento (Spec F02, seção 3.1): requisito {@code forte} ou
+     * {@code parcial} cuja evidência não existe no perfil vira {@code nenhum}.
+     * Devolve o próprio requisito quando está ok, ou a cópia rebaixada. Não
+     * loga: quem chama compara as classificações para saber se houve
+     * rebaixamento e decide o que fazer (o {@link MatchService} loga e marca
+     * {@code revisar}). Única fonte da regra — usada também pelo
+     * {@code RegressaoPromptTest}.
+     */
+    public static RequisitoClassificado verificar(RequisitoClassificado requisito, List<Skill> skills,
+            List<ExperienciaProfissional> experiencias) {
+        if (requisito.getClassificacao() == Classificacao.NENHUM
+                || referenciaValida(requisito.getEvidenciaRef(), skills, experiencias)) {
+            return requisito;
+        }
+        return requisito.rebaixarParaNenhum();
+    }
+
+    /**
      * {@code skills} e {@code experiencias} já devem vir filtrados pela
      * frente da vaga (+ TRANSVERSAL) — esta classe não aplica esse filtro,
      * só verifica pertencimento ao que recebeu.
