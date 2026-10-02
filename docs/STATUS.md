@@ -369,6 +369,22 @@ garantida, custo zero não. A corrida só ocorre com requisições simultâneas
 da mesma vaga; o caso comum (coletor reenviando em execuções sucessivas) é
 coberto pela checagem prévia.
 
+**Bug dos colchetes na `evidenciaRef` e dedup por versão do prompt
+(2026-10-02, PR #27).** O prompt lista o perfil como `[exp:2] ...` e pedia
+"o token entre colchetes como evidenciaRef"; a Claude devolvia `[exp:2]`, que
+o `VerificadorEvidencia` não reconhecia. Todo forte/parcial era rebaixado e a
+aderência caía para 0 (vaga-01 da regressão: 8 de 8 rebaixados). Os testes
+com `FitAnalysisClient` falso não pegavam: as referências eram escritas à mão
+já no formato esperado. **Correção:** o verificador aceita um par de
+colchetes externos (trim + remoção, nada além disso) e grava a referência sem
+eles; o prompt diz explicitamente "sem colchetes"; `prompt-version` v1 → v2.
+**O dedup agora considera a versão do prompt:** se o `MatchResult` salvo tem
+`versaoPrompt` nula ou diferente da atual, a análise é refeita e sobrescreve
+a mesma linha (como `reanalisar=true`, devolve 201). A UNIQUE continua
+`(profile_id, vaga_chave)`. Assim as linhas v1 afetadas pelo bug se corrigem
+sozinhas no próximo envio da vaga, sem limpeza manual no banco. Custo: toda
+mudança de `prompt-version` reanalisa (e cobra) cada vaga reenviada uma vez.
+
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
 

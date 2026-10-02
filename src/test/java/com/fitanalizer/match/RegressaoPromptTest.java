@@ -37,6 +37,15 @@ import org.springframework.test.util.ReflectionTestUtils;
  * da produção — {@link VerificadorEvidencia}, {@link AderenciaCalculadora},
  * {@link Decisao#paraPct} — para chegar na mesma decisão que o endpoint daria.
  *
+ * <p>Frente: como no endpoint, o perfil é filtrado ANTES da chamada pela
+ * frente informada (+ TRANSVERSAL), com os mesmos métodos do
+ * {@link MatchService}. A frente detectada pela Claude só existe depois da
+ * resposta, então não pode montar o prompt; se divergir da informada, sai um
+ * AVISO (em produção isso marcaria {@code revisar}). Frente por caso em
+ * {@code esperado.properties} ({@code vaga-NN.frente=COMEX}); padrão TECH.
+ *
+ * <p>Para rodar só alguns casos: {@code -Dregressao.casos=vaga-01,vaga-03}.
+ *
  * <p>Fixtures em {@code src/test/resources/regressao/}. Caso novo = um
  * {@code vaga-NN.txt} + uma linha em {@code esperado.properties} + incluir o
  * nome em {@link #CASOS}.
@@ -47,6 +56,7 @@ class RegressaoPromptTest {
     private static final String PASTA = "/regressao/";
     private static final List<String> CASOS = List.of("vaga-01", "vaga-02", "vaga-03", "vaga-04", "vaga-05");
     private static final String CASO_TECNOLOGIA_AUSENTE = "vaga-05";
+    private static final Frente FRENTE_PADRAO = Frente.TECH;
 
     // Ordem do melhor para o pior. A distância entre duas decisões é a diferença
     // de posição nesta lista. Explícita aqui (e não Decisao.ordinal()) para o
@@ -86,19 +96,33 @@ class RegressaoPromptTest {
         List<String> falhas = new ArrayList<>();
         List<String> avisos = new ArrayList<>();
 
-        for (String caso : CASOS) {
+        // -Dregressao.casos=vaga-01 roda só os casos listados (cada caso = 1 chamada paga).
+        String filtroCasos = System.getProperty("regressao.casos", "");
+        List<String> casosRodar = filtroCasos.isBlank() ? CASOS : List.of(filtroCasos.split(","));
+
+        for (String caso : casosRodar) {
             Decisao decisaoEsperada = parseDecisao(caso, esperado.getProperty(caso));
             String textoVaga = lerRecurso(caso + ".txt");
+            Frente frente = parseFrente(caso, esperado.getProperty(caso + ".frente"));
 
-            FitAnalysisResult resposta = client.analisar(
-                    new FitAnalysisRequest(textoVaga, perfil.skills(), perfil.experiencias()));
+            // Mesmo filtro do MatchService: vai no prompt e é o que o verificador aceita.
+            List<Skill> skills = MatchService.filtrarSkills(perfil.skills(), frente);
+            List<ExperienciaProfissional> experiencias = MatchService.filtrarExperiencias(perfil.experiencias(),
+                    frente);
+
+            FitAnalysisResult resposta = client.analisar(new FitAnalysisRequest(textoVaga, skills, experiencias));
 
             // Mesmas funções que o MatchService usa: rebaixa evidência inexistente,
             // calcula o percentual e a faixa.
             List<RequisitoClassificado> verificados = resposta.requisitos().stream()
-                    .map(req -> VerificadorEvidencia.verificar(req, perfil.skills(), perfil.experiencias()))
+                    .map(req -> VerificadorEvidencia.verificar(req, skills, experiencias))
                     .toList();
             int aderenciaPct = AderenciaCalculadora.aderenciaPct(verificados);
+            imprimirDiagnostico(caso, frente, skills.size(), experiencias.size(), resposta, verificados);
+            if (resposta.frenteDetectada() != frente) {
+                avisos.add("%s: frente informada %s, detectada %s".formatted(caso, frente,
+                        resposta.frenteDetectada()));
+            }
             Decisao decisaoObtida = Decisao.paraPct(aderenciaPct);
 
             int distancia = Math.abs(ORDEM.indexOf(decisaoObtida) - ORDEM.indexOf(decisaoEsperada));
@@ -149,10 +173,59 @@ class RegressaoPromptTest {
         }
     }
 
+    /**
+     * Detalhe por caso, antes da tabela: o que a Claude devolveu cru e o que o
+     * verificador rebaixou. Serve para separar "prompt ruim" de "verificador
+     * rejeitando" quando um caso falha.
+     */
+    private static void imprimirDiagnostico(String caso, Frente frente, int qtdSkills, int qtdExperiencias,
+            FitAnalysisResult resposta, List<RequisitoClassificado> verificados) {
+        System.out.println();
+        System.out.println("=== DIAGNÓSTICO " + caso + " ===");
+        System.out.println("frente usada no filtro: " + frente + " + TRANSVERSAL");
+        System.out.println("frenteDetectada pela Claude: " + resposta.frenteDetectada());
+        System.out.println("skills no prompt: " + qtdSkills + " | experiências no prompt: " + qtdExperiencias);
+        System.out.println("requisitos devolvidos pela Claude: " + resposta.requisitos().size());
+        for (int i = 0; i < resposta.requisitos().size(); i++) {
+            RequisitoClassificado cru = resposta.requisitos().get(i);
+            RequisitoClassificado ver = verificados.get(i);
+            System.out.println("  [%d] %s%n      crua=%s evidencia=%s -> verificada=%s".formatted(i + 1,
+                    cru.getDescricao(), cru.getClassificacao(), cru.getEvidenciaRef(), ver.getClassificacao()));
+        }
+        List<String> rejeitadas = new ArrayList<>();
+        for (int i = 0; i < resposta.requisitos().size(); i++) {
+            if (resposta.requisitos().get(i).getClassificacao() != verificados.get(i).getClassificacao()) {
+                rejeitadas.add(String.valueOf(resposta.requisitos().get(i).getEvidenciaRef()));
+            }
+        }
+        System.out.println("rebaixados pelo VerificadorEvidencia: " + rejeitadas.size()
+                + " | evidências rejeitadas: " + rejeitadas);
+        System.out.println("gapsRiscos: " + resposta.gapsRiscos().size());
+        resposta.gapsRiscos().forEach(g -> System.out.println("  - " + g.getGap() + " | " + g.getRisco()));
+    }
+
     /** Mesmo modelo da aplicação: CLAUDE_MODEL ou o padrão do application.yml. */
     private String modelo() {
         String doAmbiente = System.getenv("CLAUDE_MODEL");
         return doAmbiente != null && !doAmbiente.isBlank() ? doAmbiente : "claude-haiku-4-5";
+    }
+
+    private Frente parseFrente(String caso, String valor) {
+        if (valor == null || valor.isBlank()) {
+            return FRENTE_PADRAO;
+        }
+        Frente frente;
+        try {
+            frente = Frente.valueOf(valor.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            frente = Frente.TRANSVERSAL; // cai no erro abaixo
+        }
+        if (frente == Frente.TRANSVERSAL) {
+            // Mesma regra do endpoint: TRANSVERSAL não é frente de vaga.
+            throw new IllegalArgumentException("esperado.properties: frente inválida em " + caso + ".frente='"
+                    + valor + "'. Use TECH ou COMEX");
+        }
+        return frente;
     }
 
     private Decisao parseDecisao(String caso, String valor) {

@@ -25,7 +25,8 @@ public final class VerificadorEvidencia {
     /**
      * Regra de rebaixamento (Spec F02, seção 3.1): requisito {@code forte} ou
      * {@code parcial} cuja evidência não existe no perfil vira {@code nenhum}.
-     * Devolve o próprio requisito quando está ok, ou a cópia rebaixada. Não
+     * Devolve o próprio requisito quando está ok (com a referência
+     * normalizada, ver {@link #normalizar}), ou a cópia rebaixada. Não
      * loga: quem chama compara as classificações para saber se houve
      * rebaixamento e decide o que fazer (o {@link MatchService} loga e marca
      * {@code revisar}). Única fonte da regra — usada também pelo
@@ -33,11 +34,16 @@ public final class VerificadorEvidencia {
      */
     public static RequisitoClassificado verificar(RequisitoClassificado requisito, List<Skill> skills,
             List<ExperienciaProfissional> experiencias) {
-        if (requisito.getClassificacao() == Classificacao.NENHUM
-                || referenciaValida(requisito.getEvidenciaRef(), skills, experiencias)) {
+        if (requisito.getClassificacao() == Classificacao.NENHUM) {
             return requisito;
         }
-        return requisito.rebaixarParaNenhum();
+        if (!referenciaValida(requisito.getEvidenciaRef(), skills, experiencias)) {
+            return requisito.rebaixarParaNenhum();
+        }
+        // Grava o token sem colchetes: é o formato que o resto do sistema espera.
+        String normalizada = normalizar(requisito.getEvidenciaRef());
+        return normalizada.equals(requisito.getEvidenciaRef()) ? requisito
+                : new RequisitoClassificado(requisito.getDescricao(), requisito.getClassificacao(), normalizada);
     }
 
     /**
@@ -50,6 +56,7 @@ public final class VerificadorEvidencia {
         if (evidenciaRef == null || evidenciaRef.isBlank()) {
             return false;
         }
+        evidenciaRef = normalizar(evidenciaRef);
         if (evidenciaRef.startsWith(PREFIXO_SKILL)) {
             String nome = evidenciaRef.substring(PREFIXO_SKILL.length());
             return skills.stream().anyMatch(skill -> skill.temNome(nome));
@@ -60,6 +67,19 @@ public final class VerificadorEvidencia {
                     .orElse(false);
         }
         return false;
+    }
+
+    /**
+     * O prompt lista o perfil como {@code [skill:Java]} / {@code [exp:2]}, e a
+     * Claude às vezes devolve o token com os colchetes. Aceita só isso: trim e
+     * UM par de colchetes externos. Prefixo e existência continuam estritos.
+     */
+    static String normalizar(String evidenciaRef) {
+        String ref = evidenciaRef.trim();
+        if (ref.length() >= 2 && ref.startsWith("[") && ref.endsWith("]")) {
+            return ref.substring(1, ref.length() - 1);
+        }
+        return ref;
     }
 
     private static Optional<Long> idExperiencia(String evidenciaRef) {
