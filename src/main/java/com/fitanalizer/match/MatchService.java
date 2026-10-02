@@ -82,7 +82,7 @@ public class MatchService {
 
         // Etapa 3 — transação curta só para gravar.
         try {
-            return transactionTemplate.execute(status -> gravar(preparo, frente, vagaUrl, reanalisar, calculo));
+            return transactionTemplate.execute(status -> gravar(preparo, frente, vagaUrl, calculo));
         } catch (DataIntegrityViolationException e) {
             // Concorrência (PRD F02, seção 6.2): outra requisição da mesma vaga
             // salvou entre a etapa 1 e a etapa 3. A transação da etapa 3 já foi
@@ -108,16 +108,24 @@ public class MatchService {
 
         String vagaChave = calcularVagaChave(textoVaga, vagaUrl);
 
+        boolean sobrescrever = reanalisar;
         if (!reanalisar) {
             Optional<MatchResult> existente = matchResultRepository.findByProfileAndVagaChave(profile, vagaChave);
             if (existente.isPresent()) {
-                // Dedup: nenhuma chamada à Claude API (PRD F02, seção 6.2).
-                return new Preparo(profile, vagaChave, List.of(), List.of(), concluir(existente.get(), false));
+                if (versaoPrompt.equals(existente.get().getVersaoPrompt())) {
+                    // Dedup: nenhuma chamada à Claude API (PRD F02, seção 6.2).
+                    return new Preparo(profile, vagaChave, List.of(), List.of(), false,
+                            concluir(existente.get(), false));
+                }
+                // Salvo com outro prompt (ou sem versão registrada): o resultado
+                // pode refletir um prompt já corrigido — ex: v1 rebaixava toda
+                // evidência citada com colchetes. Reanalisa na mesma linha.
+                sobrescrever = true;
             }
         }
 
         return new Preparo(profile, vagaChave, filtrarSkills(profile.getSkills(), frente),
-                filtrarExperiencias(profile.getHistoricoProfissional(), frente), null);
+                filtrarExperiencias(profile.getHistoricoProfissional(), frente), sobrescrever, null);
     }
 
     private Calculo calcular(String owner, Preparo preparo, String textoVaga, Frente frente) {
@@ -150,15 +158,15 @@ public class MatchService {
         return new Calculo(aderenciaPct, requisitosVerificados, gapsRiscos, decisao, revisar);
     }
 
-    private AnaliseResultado gravar(Preparo preparo, Frente frente, String vagaUrl, boolean reanalisar,
-            Calculo calculo) {
+    private AnaliseResultado gravar(Preparo preparo, Frente frente, String vagaUrl, Calculo calculo) {
         Profile profile = preparo.profile();
         String vagaChave = preparo.vagaChave();
 
-        // Reanálise sobrescreve a mesma linha (Spec F02, seção 6.3). Sem reanálise
-        // sempre INSERT: quem arbitra uma corrida é a UNIQUE do banco, não um
-        // "já existe?" que ficaria velho entre a etapa 1 e esta.
-        MatchResult matchResult = reanalisar
+        // Reanálise (pedida ou por versão de prompt diferente) sobrescreve a mesma
+        // linha (Spec F02, seção 6.3). Sem reanálise sempre INSERT: quem arbitra
+        // uma corrida é a UNIQUE do banco, não um "já existe?" que ficaria velho
+        // entre a etapa 1 e esta.
+        MatchResult matchResult = preparo.sobrescrever()
                 ? matchResultRepository.findByProfileAndVagaChave(profile, vagaChave)
                         .orElseGet(() -> new MatchResult(profile, frente, vagaChave, vagaUrl))
                 : new MatchResult(profile, frente, vagaChave, vagaUrl);
@@ -173,9 +181,13 @@ public class MatchService {
         return concluir(matchResult, true);
     }
 
-    /** O que a etapa 1 entrega para as etapas seguintes ({@code dedup} != null encerra o fluxo). */
+    /**
+     * O que a etapa 1 entrega para as etapas seguintes ({@code dedup} != null
+     * encerra o fluxo). {@code sobrescrever}: atualizar a linha existente em vez
+     * de inserir — {@code reanalisar=true} ou versão do prompt diferente.
+     */
     private record Preparo(Profile profile, String vagaChave, List<Skill> skills,
-            List<ExperienciaProfissional> experiencias, AnaliseResultado dedup) {
+            List<ExperienciaProfissional> experiencias, boolean sobrescrever, AnaliseResultado dedup) {
     }
 
     /** Resultado da etapa 2 (Claude + verificação + cálculo), pronto para gravar. */

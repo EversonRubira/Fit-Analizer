@@ -13,6 +13,7 @@ import com.fitanalizer.profile.Profile;
 import com.fitanalizer.profile.ProfileNotFoundException;
 import com.fitanalizer.profile.ProfileRepository;
 import com.fitanalizer.profile.Skill;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -81,11 +82,19 @@ class MatchServiceTest {
         verify(fitAnalysisClient, never()).analisar(any());
     }
 
+    /** Linha já analisada com a versão de prompt informada ({@code null} = linha antiga, sem versão). */
+    private MatchResult salvoComVersao(Profile profile, String versaoPrompt) {
+        MatchResult salvo = new MatchResult(profile, Frente.TECH, "https://vaga.example/1", "https://vaga.example/1");
+        salvo.aplicarAnalise(0, List.of(), List.of(), Decisao.FORA_ESCOPO, false, versaoPrompt, "claude-haiku-4-5",
+                Instant.parse("2026-10-01T10:00:00Z"));
+        return salvo;
+    }
+
     @Test
     void dedupSemReanalisarDevolveResultadoExistenteSemChamarClaude() {
         Profile profile = perfilComSkillTech();
         when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
-        MatchResult existente = new MatchResult(profile, Frente.TECH, "https://vaga.example/1", "https://vaga.example/1");
+        MatchResult existente = salvoComVersao(profile, "v1"); // mesma versão do service (setUp)
         when(matchResultRepository.findByProfileAndVagaChave(profile, "https://vaga.example/1"))
                 .thenReturn(Optional.of(existente));
 
@@ -215,6 +224,47 @@ class MatchServiceTest {
         assertThat(resultado.matchResult().isRevisar()).isTrue();
         // aderenciaPct e classificacao não são afetados pela divergência de frente
         assertThat(resultado.matchResult().getAderenciaPct()).isEqualTo(100);
+    }
+
+    @Test
+    void versaoDePromptDiferenteChamaClaudeESobrescreveMesmaLinha() {
+        Profile profile = perfilComSkillTech();
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        MatchResult existente = salvoComVersao(profile, "v0"); // service roda com v1
+        when(matchResultRepository.findByProfileAndVagaChave(profile, "https://vaga.example/1"))
+                .thenReturn(Optional.of(existente));
+        RequisitoClassificado requisito = new RequisitoClassificado("Java", Classificacao.FORTE, "skill:Java");
+        when(fitAnalysisClient.analisar(any()))
+                .thenReturn(new FitAnalysisResult(Frente.TECH, List.of(requisito), List.of()));
+
+        AnaliseResultado resultado = service.analisar("everson", "texto", Frente.TECH, "https://vaga.example/1",
+                false);
+
+        verify(fitAnalysisClient).analisar(any());
+        assertThat(resultado.analiseNova()).isTrue();
+        assertThat(resultado.matchResult()).isSameAs(existente); // mesma linha, não um INSERT novo
+        assertThat(existente.getVersaoPrompt()).isEqualTo("v1");
+        assertThat(existente.getAderenciaPct()).isEqualTo(100);
+        verify(matchResultRepository).saveAndFlush(existente);
+    }
+
+    @Test
+    void versaoDePromptNulaChamaClaudeESobrescreveMesmaLinha() {
+        Profile profile = perfilComSkillTech();
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        MatchResult existente = salvoComVersao(profile, null);
+        when(matchResultRepository.findByProfileAndVagaChave(profile, "https://vaga.example/1"))
+                .thenReturn(Optional.of(existente));
+        when(fitAnalysisClient.analisar(any()))
+                .thenReturn(new FitAnalysisResult(Frente.TECH, List.of(), List.of()));
+
+        AnaliseResultado resultado = service.analisar("everson", "texto", Frente.TECH, "https://vaga.example/1",
+                false);
+
+        verify(fitAnalysisClient).analisar(any());
+        assertThat(resultado.analiseNova()).isTrue();
+        assertThat(resultado.matchResult()).isSameAs(existente);
+        assertThat(existente.getVersaoPrompt()).isEqualTo("v1");
     }
 
     @Test
