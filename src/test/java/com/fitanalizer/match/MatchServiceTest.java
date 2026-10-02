@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -171,6 +172,32 @@ class MatchServiceTest {
         assertThat(matchResult.getRequisitos().get(0).getEvidenciaRef()).isNull();
         assertThat(matchResult.isRevisar()).isTrue();
         assertThat(matchResult.getAderenciaPct()).isZero();
+    }
+
+    @Test
+    void evidenciaComColchetesNaoERebaixada() {
+        // Regressão do bug real: a Claude devolve o token como aparece na listagem
+        // do prompt ("[skill:Java]", "[exp:7]"). Isso não é alucinação.
+        Profile profile = perfilComSkillTech();
+        ExperienciaProfissional expTech = new ExperienciaProfissional("Empresa", "Dev", Frente.TECH,
+                LocalDate.of(2024, 1, 1), null);
+        ReflectionTestUtils.setField(expTech, "id", 7L);
+        profile.addExperienciaProfissional(expTech);
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(matchResultRepository.findByProfileAndVagaChave(any(), any())).thenReturn(Optional.empty());
+        when(fitAnalysisClient.analisar(any())).thenReturn(new FitAnalysisResult(Frente.TECH, List.of(
+                new RequisitoClassificado("Java", Classificacao.FORTE, "[skill:Java]"),
+                new RequisitoClassificado("Backend", Classificacao.PARCIAL, "[exp:7]")), List.of()));
+
+        AnaliseResultado resultado = service.analisar("everson", "vaga Java", Frente.TECH, null, false);
+
+        MatchResult matchResult = resultado.matchResult();
+        assertThat(matchResult.getRequisitos()).extracting(RequisitoClassificado::getClassificacao)
+                .containsExactly(Classificacao.FORTE, Classificacao.PARCIAL);
+        assertThat(matchResult.getRequisitos()).extracting(RequisitoClassificado::getEvidenciaRef)
+                .containsExactly("skill:Java", "exp:7");
+        assertThat(matchResult.getAderenciaPct()).isEqualTo(75);
+        assertThat(matchResult.isRevisar()).isFalse();
     }
 
     @Test

@@ -109,6 +109,8 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                 Regra mais importante: nunca invente evidência. Para cada requisito
                 "forte" ou "parcial", cite em evidenciaRef o token EXATO do item do
                 perfil abaixo que sustenta a classificação — nunca reescreva o nome.
+                O token vai SEM os colchetes: escreva exp:2 ou skill:Java, nunca
+                [exp:2] ou [skill:Java].
                 Se não houver evidência real no perfil, classifique "nenhum" e deixe
                 evidenciaRef vazio.
 
@@ -117,7 +119,7 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                 Classifique também a frente da vaga (COMEX ou TECH) a partir do
                 próprio texto, em frenteDetectada.
 
-                Perfil disponível (use o token entre colchetes como evidenciaRef):
+                Perfil disponível (o token é o texto dentro dos colchetes, sem eles):
                 """);
         request.skills().forEach(skill -> prompt.append("- [skill:%s] %s, %d anos%n"
                 .formatted(skill.getNome(), skill.getNome(), skill.getAnosExperiencia())));

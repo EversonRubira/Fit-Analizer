@@ -228,15 +228,16 @@ public class MatchService {
      * Filtro exigido em dois pontos pelo PRD (seção 6.4a): o que vai no prompt
      * (aqui) e o que o {@link VerificadorEvidencia} aceita como evidência
      * válida (mesma lista reaproveitada em {@code verificar}, sem duplicar o
-     * filtro num segundo lugar que poderia divergir).
+     * filtro num segundo lugar que poderia divergir). Package-private e
+     * estático para o {@code RegressaoPromptTest} usar o mesmo filtro.
      */
-    private List<Skill> filtrarSkills(List<Skill> skills, Frente frente) {
+    static List<Skill> filtrarSkills(List<Skill> skills, Frente frente) {
         return skills.stream()
                 .filter(skill -> skill.getFrente() == frente || skill.getFrente() == Frente.TRANSVERSAL)
                 .toList();
     }
 
-    private List<ExperienciaProfissional> filtrarExperiencias(List<ExperienciaProfissional> experiencias,
+    static List<ExperienciaProfissional> filtrarExperiencias(List<ExperienciaProfissional> experiencias,
             Frente frente) {
         return experiencias.stream()
                 .filter(exp -> exp.getFrente() == frente || exp.getFrente() == Frente.TRANSVERSAL)

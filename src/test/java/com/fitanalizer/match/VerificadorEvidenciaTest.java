@@ -72,4 +72,63 @@ class VerificadorEvidenciaTest {
         assertThat(VerificadorEvidencia.referenciaValida("skill:Negociação", skillsFiltradosPorTech, List.of()))
                 .isFalse();
     }
+
+    // --- Colchetes: o prompt lista o perfil como [skill:Java] / [exp:2] e a Claude
+    // às vezes devolve o token assim. Só UM par externo + trim é aceito.
+
+    @Test
+    void skillComColchetesEValida() {
+        assertThat(VerificadorEvidencia.referenciaValida("[skill:Java]", skills, List.of())).isTrue();
+    }
+
+    @Test
+    void experienciaComColchetesEValida() {
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(2L));
+        assertThat(VerificadorEvidencia.referenciaValida("[exp:2]", List.of(), experiencias)).isTrue();
+    }
+
+    @Test
+    void experienciaSemColchetesContinuaValida() {
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(2L));
+        assertThat(VerificadorEvidencia.referenciaValida("exp:2", List.of(), experiencias)).isTrue();
+    }
+
+    @Test
+    void espacosEmVoltaDosColchetesSaoIgnorados() {
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(2L));
+        assertThat(VerificadorEvidencia.referenciaValida("  [exp:2]  ", List.of(), experiencias)).isTrue();
+        assertThat(VerificadorEvidencia.referenciaValida("  exp:2 ", List.of(), experiencias)).isTrue();
+    }
+
+    @Test
+    void referenciaInexistenteComColchetesContinuaInvalida() {
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(2L));
+        assertThat(VerificadorEvidencia.referenciaValida("[exp:99]", List.of(), experiencias)).isFalse();
+        assertThat(VerificadorEvidencia.referenciaValida("[skill:Kafka]", skills, List.of())).isFalse();
+    }
+
+    @Test
+    void prefixoDesconhecidoComColchetesContinuaInvalido() {
+        assertThat(VerificadorEvidencia.referenciaValida("[tech:Java]", skills, List.of())).isFalse();
+        assertThat(VerificadorEvidencia.referenciaValida("[Java]", skills, List.of())).isFalse();
+    }
+
+    @Test
+    void outrasVariacoesDeColchetesNaoSaoAceitas() {
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(2L));
+        assertThat(VerificadorEvidencia.referenciaValida("[[exp:2]]", List.of(), experiencias)).isFalse();
+        assertThat(VerificadorEvidencia.referenciaValida("[exp:2", List.of(), experiencias)).isFalse();
+        assertThat(VerificadorEvidencia.referenciaValida("exp:2]", List.of(), experiencias)).isFalse();
+        assertThat(VerificadorEvidencia.referenciaValida("(exp:2)", List.of(), experiencias)).isFalse();
+    }
+
+    @Test
+    void verificarMantemClassificacaoEGravaReferenciaSemColchetes() {
+        RequisitoClassificado requisito = new RequisitoClassificado("Java", Classificacao.FORTE, "[skill:Java]");
+
+        RequisitoClassificado verificado = VerificadorEvidencia.verificar(requisito, skills, List.of());
+
+        assertThat(verificado.getClassificacao()).isEqualTo(Classificacao.FORTE);
+        assertThat(verificado.getEvidenciaRef()).isEqualTo("skill:Java");
+    }
 }
