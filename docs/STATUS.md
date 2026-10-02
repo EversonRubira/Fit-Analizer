@@ -1,6 +1,6 @@
 # Status do projeto — Fit Analizer
 
-**Atualizado em:** 2026-09-30
+**Atualizado em:** 2026-10-02
 
 ## Visão geral
 
@@ -384,6 +384,29 @@ a mesma linha (como `reanalisar=true`, devolve 201). A UNIQUE continua
 `(profile_id, vaga_chave)`. Assim as linhas v1 afetadas pelo bug se corrigem
 sozinhas no próximo envio da vaga, sem limpeza manual no banco. Custo: toda
 mudança de `prompt-version` reanalisa (e cobra) cada vaga reenviada uma vez.
+
+**Decisões de 2026-10-02 (detalhe no PRD da F02, seção 10).**
+- **Origem das vagas:** externa (colar à mão ou agente de IA com busca na
+  web); contrato do `/matches` inalterado. Coletor próprio deixa de ser
+  planeado, só volta se colar vagas virar fricção real.
+- **Escopo:** uso pessoal, só na máquina do dono. Fora de escopo: auth por
+  chave, rate limit, nuvem, Flyway urgente (reabrir, com o `ddl-auto`, se
+  for hospedar). Mantido: limite de gasto na Anthropic. RAG sobre o Profile
+  descartado.
+- **Qualidade:** mudou prompt ou formato de saída → regressão contra a API
+  real; erro novo em vaga real vira caso novo. Fixtures versionadas são só
+  exemplos; as reais ficam locais e nunca são commitadas. Subir
+  `prompt-version` só com mudança real (reprocessa e cobra). Toda mudança de
+  prompt precisa de pelo menos uma chamada real (lição dos colchetes).
+- **Em aberto:** primeira rodada completa da regressão: 2 de 5 bateram;
+  vaga-01 (31%), vaga-04 (63%) e vaga-05 (70%) erraram por 2 faixas ou mais.
+  Hipótese: o prompt ignora senioridade e anos mínimos e é duro com
+  requisitos de atitude. Próximo passo: diagnóstico da vaga-01 e da vaga-05.
+- **Pendências:** (1) configurar `server.address=127.0.0.1` — ainda não está
+  no `application.yml`; (2) mover as fixtures reais da regressão para uma
+  pasta no `.gitignore`, com o `RegressaoPromptTest` caindo para os exemplos
+  versionados quando ela não existir (hoje as reais sobrescrevem os exemplos
+  no working tree e aparecem como modificadas no `git status`).
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.
