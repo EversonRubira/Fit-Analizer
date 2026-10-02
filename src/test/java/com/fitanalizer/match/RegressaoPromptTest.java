@@ -93,10 +93,10 @@ class RegressaoPromptTest {
             FitAnalysisResult resposta = client.analisar(
                     new FitAnalysisRequest(textoVaga, perfil.skills(), perfil.experiencias()));
 
-            // Mesmo cálculo do MatchService.calcular: rebaixa evidência inexistente,
-            // calcula o percentual e a faixa. Se a regra de produção mudar lá, mudar aqui.
+            // Mesmas funções que o MatchService usa: rebaixa evidência inexistente,
+            // calcula o percentual e a faixa.
             List<RequisitoClassificado> verificados = resposta.requisitos().stream()
-                    .map(req -> verificar(req, perfil))
+                    .map(req -> VerificadorEvidencia.verificar(req, perfil.skills(), perfil.experiencias()))
                     .toList();
             int aderenciaPct = AderenciaCalculadora.aderenciaPct(verificados);
             Decisao decisaoObtida = Decisao.paraPct(aderenciaPct);
@@ -147,17 +147,6 @@ class RegressaoPromptTest {
             fail("Regressão do prompt falhou em %d caso(s):%n- %s".formatted(falhas.size(),
                     String.join("\n- ", falhas)));
         }
-    }
-
-    // Réplica de MatchService.verificar: requisito forte/parcial cuja evidência
-    // não existe no perfil vira "nenhum".
-    private RequisitoClassificado verificar(RequisitoClassificado req, Perfil perfil) {
-        if (req.getClassificacao() == Classificacao.NENHUM
-                || VerificadorEvidencia.referenciaValida(req.getEvidenciaRef(), perfil.skills(),
-                        perfil.experiencias())) {
-            return req;
-        }
-        return req.rebaixarParaNenhum();
     }
 
     /** Mesmo modelo da aplicação: CLAUDE_MODEL ou o padrão do application.yml. */
