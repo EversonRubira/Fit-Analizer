@@ -1,0 +1,9 @@
+EXEMPLO — substituir por vaga real (caso: aderência mediana).
+
+Engenheiro(a) de Software Backend
+Requisitos obrigatórios:
+- Java
+- Kubernetes
+- AWS (EC2, S3, Lambda)
+- Mensageria (RabbitMQ ou Kafka)
+- Terraform

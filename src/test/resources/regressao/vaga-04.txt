@@ -1,0 +1,8 @@
+EXEMPLO — substituir por vaga real (caso: aderência fraca ou fora de área).
+
+Desenvolvedor(a) Mobile iOS Sênior
+Requisitos obrigatórios:
+- Swift
+- SwiftUI
+- 5+ anos de desenvolvimento iOS
+- Publicação de apps na App Store

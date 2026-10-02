@@ -1,0 +1,7 @@
+EXEMPLO — substituir por vaga real (caso: pede uma tecnologia que não existe no Profile).
+
+Desenvolvedor(a) Backend Java
+Requisitos obrigatórios:
+- Java
+- Spring Boot
+- Apache Kafka

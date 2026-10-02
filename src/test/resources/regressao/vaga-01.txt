@@ -1,0 +1,9 @@
+EXEMPLO — substituir por vaga real (caso: ótima aderência).
+
+Desenvolvedor(a) Backend Java Júnior
+Requisitos obrigatórios:
+- Java
+- Spring Boot
+- PostgreSQL
+- Testes automatizados com JUnit
+- Git

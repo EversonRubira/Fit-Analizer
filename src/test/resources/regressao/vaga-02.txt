@@ -1,0 +1,9 @@
+EXEMPLO — substituir por vaga real (caso: boa aderência).
+
+Desenvolvedor(a) Backend Pleno
+Requisitos obrigatórios:
+- Java
+- Spring Boot
+- PostgreSQL
+- Docker
+- Experiência com APIs REST em produção

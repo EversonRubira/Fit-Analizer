@@ -112,6 +112,28 @@ Com Docker Engine 29 ou mais novo, é preciso o Testcontainers 2.x, que o
 O GitHub Actions (`.github/workflows/ci.yml`) roda `./mvnw test` em todo PR e
 em todo push para `main`.
 
+## Conjunto de regressão do prompt (gasta crédito)
+
+Teste manual que manda vagas reais, julgadas à mão, para a Claude API de
+verdade e falha se a decisão obtida ficar a 2 faixas ou mais da esperada
+(1 faixa de diferença é tolerada). Serve para pegar uma mudança no prompt que
+piorou a análise. Fica **fora** do `./mvnw test` normal e do CI.
+
+Fixtures em `src/test/resources/regressao/`: `profile-teste.json` (perfil
+fictício), `vaga-01.txt` a `vaga-05.txt` e `esperado.properties` (decisão
+esperada de cada vaga). Sem `ANTHROPIC_API_KEY` ou com algum valor vazio em
+`esperado.properties`, o teste é ignorado, não falha.
+
+```bash
+read -s ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
+./mvnw test -Dgroups=regressao -DexcludedGroups= -Dtest=RegressaoPromptTest
+```
+
+Cada rodada faz cerca de 5 chamadas à API (uma por vaga). Rode sempre que o
+prompt mudar e incremente `fitanalizer.claude.prompt-version`. Cada erro novo
+da Claude numa vaga real vira um caso novo: um `vaga-NN.txt`, uma linha em
+`esperado.properties` e o nome na lista `CASOS` do `RegressaoPromptTest`.
+
 ## Documentação
 
 - PRDs: [`docs/prd/`](docs/prd/)
