@@ -33,3 +33,6 @@ application-local.properties
 # Dados pessoais dos scripts de análise (devem ficar fora do repositório, em ~)
 *.csv
 fit-profile-backup-*.json
+
+# Fixtures REAIS da regressão (vagas de terceiros, decisões, Profile): nunca versionar
+regressao-local/

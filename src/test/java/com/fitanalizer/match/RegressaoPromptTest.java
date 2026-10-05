@@ -13,6 +13,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,14 +48,19 @@ import org.springframework.test.util.ReflectionTestUtils;
  *
  * <p>Para rodar só alguns casos: {@code -Dregressao.casos=vaga-01,vaga-03}.
  *
- * <p>Fixtures em {@code src/test/resources/regressao/}. Caso novo = um
- * {@code vaga-NN.txt} + uma linha em {@code esperado.properties} + incluir o
- * nome em {@link #CASOS}.
+ * <p>Fixtures: as REAIS ficam em {@code regressao-local/} na raiz do projeto
+ * (ignorada pelo git; outra pasta com {@code -Dregressao.dir=<caminho>}). Sem
+ * {@code esperado.properties} nela, usa os exemplos versionados de
+ * {@code src/test/resources/regressao/}. Nunca mistura as duas fontes (ver
+ * {@link #escolherFonte}). Caso novo = um {@code vaga-NN.txt} + uma linha em
+ * {@code esperado.properties} + incluir o nome em {@link #CASOS}.
  */
 @Tag("regressao")
 class RegressaoPromptTest {
 
     private static final String PASTA = "/regressao/";
+    // Relativo ao diretório de trabalho do Maven (a raiz do projeto).
+    private static final Path DIR_LOCAL_PADRAO = Path.of("regressao-local");
     private static final List<String> CASOS = List.of("vaga-01", "vaga-02", "vaga-03", "vaga-04", "vaga-05");
     private static final String CASO_TECNOLOGIA_AUSENTE = "vaga-05";
     private static final Frente FRENTE_PADRAO = Frente.TECH;
@@ -70,6 +77,13 @@ class RegressaoPromptTest {
 
     @Test
     void decisoesDaClaudeFicamPertoDoJulgamentoHumano() throws IOException {
+        // Primeira linha da rodada, antes de qualquer checagem: mostra de onde vêm
+        // as fixtures mesmo quando o teste acaba ignorado.
+        fonte = escolherFonte(System.getProperty("regressao.dir"), DIR_LOCAL_PADRAO);
+        System.out.println(fonte.local()
+                ? "Fixtures da regressão: LOCAL em " + fonte.dir().toAbsolutePath()
+                : "Fixtures da regressão: EXEMPLOS versionados (classpath " + PASTA + ")");
+
         // --- Pré-condições: sem elas o teste é IGNORADO, nunca falha ---
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         assumeTrue(apiKey != null && !apiKey.isBlank(),
@@ -267,8 +281,53 @@ class RegressaoPromptTest {
         }
     }
 
-    private InputStream abrir(String arquivo) {
-        InputStream entrada = getClass().getResourceAsStream(PASTA + arquivo);
+    // Fonte da rodada atual; definida no início do teste.
+    private Fonte fonte;
+
+    private InputStream abrir(String arquivo) throws IOException {
+        return abrir(fonte, arquivo);
+    }
+
+    /** De onde vêm TODAS as fixtures de uma rodada: pasta local ou exemplos do classpath. */
+    record Fonte(boolean local, Path dir) {
+    }
+
+    /**
+     * Regra da fonte, sem mistura por arquivo:
+     * <ul>
+     * <li>{@code dirPropriedade} (-Dregressao.dir) informado: a pasta TEM de ter
+     * {@code esperado.properties}, senão falha — quem indicou uma pasta espera
+     * usá-la, e cair nos exemplos em silêncio esconderia um caminho errado.</li>
+     * <li>Sem ele: {@code dirPadrao} (regressao-local/) se tiver
+     * {@code esperado.properties}; senão os exemplos do classpath.</li>
+     * </ul>
+     */
+    static Fonte escolherFonte(String dirPropriedade, Path dirPadrao) {
+        if (dirPropriedade != null && !dirPropriedade.isBlank()) {
+            Path dir = Path.of(dirPropriedade);
+            if (!Files.isRegularFile(dir.resolve("esperado.properties"))) {
+                throw new IllegalStateException("-Dregressao.dir=" + dirPropriedade
+                        + " não tem esperado.properties (" + dir.toAbsolutePath() + ")");
+            }
+            return new Fonte(true, dir);
+        }
+        if (Files.isRegularFile(dirPadrao.resolve("esperado.properties"))) {
+            return new Fonte(true, dirPadrao);
+        }
+        return new Fonte(false, null);
+    }
+
+    /** Lê um arquivo SÓ da fonte escolhida: arquivo ausente na pasta local é erro, nunca cai no exemplo. */
+    static InputStream abrir(Fonte fonte, String arquivo) throws IOException {
+        if (fonte.local()) {
+            Path caminho = fonte.dir().resolve(arquivo);
+            if (!Files.isRegularFile(caminho)) {
+                throw new IllegalStateException("Fixture local não encontrada: " + caminho.toAbsolutePath()
+                        + " (a fonte é local: os exemplos do classpath não são usados)");
+            }
+            return Files.newInputStream(caminho);
+        }
+        InputStream entrada = RegressaoPromptTest.class.getResourceAsStream(PASTA + arquivo);
         if (entrada == null) {
             throw new IllegalStateException("Fixture não encontrado: src/test/resources" + PASTA + arquivo);
         }

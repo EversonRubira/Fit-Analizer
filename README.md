@@ -164,20 +164,44 @@ verdade e falha se a decisão obtida ficar a 2 faixas ou mais da esperada
 (1 faixa de diferença é tolerada). Serve para pegar uma mudança no prompt que
 piorou a análise. Fica **fora** do `./mvnw test` normal e do CI.
 
-Fixtures em `src/test/resources/regressao/`: `profile-teste.json` (perfil
-fictício), `vaga-01.txt` a `vaga-05.txt` e `esperado.properties` (decisão
-esperada de cada vaga). Sem `ANTHROPIC_API_KEY` ou com algum valor vazio em
-`esperado.properties`, o teste é ignorado, não falha.
+**Fixtures reais ficam em `regressao-local/`** na raiz do projeto, ignorada
+pelo git: `profile-teste.json`, `vaga-01.txt` a `vaga-05.txt` e
+`esperado.properties` (decisão esperada de cada vaga). O repositório é
+público: vagas de terceiros, as suas decisões e o seu Profile **nunca** vão
+para `src/test/resources/`. Lá ficam só os exemplos fictícios, e o
+`RegressaoFixturesTest` quebra o CI se algum `vaga-NN.txt` versionado não
+começar com `EXEMPLO`.
+
+- Se `regressao-local/esperado.properties` existir, **todas** as fixtures vêm
+  dessa pasta; senão, todas vêm dos exemplos versionados. Nunca mistura: um
+  arquivo que falte na pasta local é erro.
+- Outra pasta: `-Dregressao.dir=<caminho>` (tem de ter `esperado.properties`,
+  senão o teste falha em vez de usar os exemplos).
+- A primeira linha da rodada diz qual fonte foi usada e o caminho.
+- Sem `ANTHROPIC_API_KEY` ou com algum valor vazio em `esperado.properties`, o
+  teste é ignorado, não falha.
 
 ```bash
 read -s ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
 ./mvnw test -Dgroups=regressao -DexcludedGroups= -Dtest=RegressaoPromptTest
+./mvnw test -Dgroups=regressao -DexcludedGroups= -Dtest=RegressaoPromptTest -Dregressao.dir="$HOME/outra-pasta"
 ```
+
+**Migração (uma vez, se as fixtures reais ainda estão em
+`src/test/resources/regressao/` com `skip-worktree`)**, nesta ordem:
+
+1. Copie as reais para a pasta local **antes de qualquer outra coisa**:
+   `mkdir -p regressao-local && cp src/test/resources/regressao/* regressao-local/`
+2. `git update-index --no-skip-worktree src/test/resources/regressao/*`
+3. `git checkout -- src/test/resources/regressao` (restaura os exemplos)
+4. `git status`: deve estar limpo, sem `regressao-local/` (ignorada). Até o
+   passo 3, o `./mvnw test` local falha na guarda, e isso é esperado.
 
 Cada rodada faz cerca de 5 chamadas à API (uma por vaga). Rode sempre que o
 prompt mudar e incremente `fitanalizer.claude.prompt-version`. Cada erro novo
-da Claude numa vaga real vira um caso novo: um `vaga-NN.txt`, uma linha em
-`esperado.properties` e o nome na lista `CASOS` do `RegressaoPromptTest`.
+da Claude numa vaga real vira um caso novo: um `vaga-NN.txt` e uma linha em
+`esperado.properties` em `regressao-local/`, e o nome na lista `CASOS` do
+`RegressaoPromptTest`.
 
 ## Documentação
 
