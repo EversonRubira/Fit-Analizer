@@ -114,31 +114,48 @@ em todo push para `main`.
 
 ## Analisar vagas reais
 
-Com a aplicação rodando (`./mvnw spring-boot:run`) e o Profile cadastrado:
+O fluxo do dia a dia são três comandos:
 
 ```bash
-# Decida ANTES de rodar: a sua nota é obrigatória e o script recusa rodar sem ela.
-scripts/analisar-vaga.sh ~/vagas/acme-backend.txt https://exemplo.com/vagas/123 cv_carta
-scripts/analisar-vaga.sh ~/vagas/beta.txt beta-dev-java-2026-10 nao_candidatar COMEX
-
-# Backup do Profile (opcional)
-scripts/backup-profile.sh
+scripts/subir.sh                    # Postgres (container fit-pg) + aplicação, se não estiverem no ar
+scripts/analisar-vaga.sh cv_carta   # abre o editor: cole a vaga, grave e feche
+scripts/parar.sh                    # para só a aplicação; o Postgres e os dados ficam
 ```
 
-- **Nota:** `cv_prioritario`, `cv_carta`, `cv_carta_com_aviso`,
-  `nao_candidatar` ou `fora_escopo`. Registar a sua decisão antes de ver a do
-  sistema é o que permite medir depois se ele acerta. Quando o sistema discorda,
-  o script avisa a distância em faixas.
-- **Padrões:** frente `TECH`, `OWNER=everson`, `API_URL=http://localhost:8080`.
-- **Fora do repositório:** o histórico vai para `~/fit-analises.csv` (a coluna
-  `mudei_de_ideia` fica para preencher à mão) e o backup para
-  `~/fit-profile-backup-AAAA-MM-DD.json`. O texto da vaga nunca é impresso nem
-  gravado.
-- **Custo:** cada análise nova chama a Claude e gasta crédito (HTTP 201).
-  Repetir o mesmo `vagaUrl` devolve o resultado salvo, sem custo (HTTP 200),
-  exceto depois de uma mudança de `prompt-version`, que reanalisa uma vez. Use
-  sempre o mesmo `vagaUrl`/id para a mesma vaga.
-- Requer `curl` e `jq`.
+- **Decida antes de rodar.** A nota (`cv_prioritario`, `cv_carta`,
+  `cv_carta_com_aviso`, `nao_candidatar` ou `fora_escopo`) é o primeiro
+  argumento e é validada antes de a vaga ser lida. Registar a sua decisão antes
+  de ver a do sistema é o que permite medir depois se ele acerta; quando ele
+  discorda, o script avisa a distância em faixas.
+- **Origem da vaga:** sem origem abre o `$EDITOR` (`nano` por padrão) num
+  temporário privado em `/tmp`, apagado no fim; `-` lê do stdin (cole e
+  Ctrl+D); ou passe um arquivo. Opções: `--url <id-ou-link>` e
+  `--frente TECH|COMEX` (padrão `TECH`).
+- **Limpeza antes de enviar:** remove URLs (de links markdown fica só o texto
+  visível), espaços no fim das linhas e linhas vazias repetidas, e diz quantos
+  caracteres saíram. Texto acima de 15000 caracteres (`VAGA_MAX_CHARS`, igual
+  ao limite do servidor) é recusado sem chamar a API.
+- **Custo e dedup:** cada análise nova chama a Claude e gasta crédito
+  (HTTP 201). Com `--url`, repetir o mesmo link devolve o resultado salvo, sem
+  custo (HTTP 200). Sem `--url`, o servidor identifica a vaga pelo texto
+  (em minúsculas, espaços colapsados): colar exatamente a mesma vaga também
+  devolve o salvo, mas qualquer diferença real no texto é uma análise nova.
+  Mudar `prompt-version` reanalisa cada vaga uma vez.
+- **Fora do repositório:** o histórico vai para `~/fit-analises.csv` (colunas
+  `data, id, minha_nota, nota_sistema, aderencia, revisar, distancia,
+  mudei_de_ideia, titulo`; `id` é o `--url` ou `hash:` + 8 caracteres do
+  texto limpo, só local). O texto da vaga nunca é impresso nem gravado; só a
+  primeira linha, como título. Um CSV no formato antigo é migrado
+  automaticamente (cópia em `~/fit-analises.csv.antes-da-migracao`).
+- **`subir.sh`:** idempotente. Cria o container `fit-pg` (volume
+  `fit-pg-data`) se não existir, inicia-o se estiver parado, espera o banco e
+  sobe a aplicação em segundo plano (log em `/tmp/fit-app.log`). Avisa se
+  `ANTHROPIC_API_KEY` não estiver definida e se o Profile não existir; não cria
+  dados.
+- **Backup do Profile (opcional):** `scripts/backup-profile.sh` grava em
+  `~/fit-profile-backup-AAAA-MM-DD.json`.
+- **Padrões:** `OWNER=everson`, `API_URL=http://localhost:8080`. Requer
+  `docker`, `curl` e `jq`.
 
 ## Conjunto de regressão do prompt (gasta crédito)
 
