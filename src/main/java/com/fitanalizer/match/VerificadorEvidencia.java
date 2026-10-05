@@ -43,7 +43,7 @@ public final class VerificadorEvidencia {
         // Grava o token sem colchetes: é o formato que o resto do sistema espera.
         String normalizada = normalizar(requisito.getEvidenciaRef());
         return normalizada.equals(requisito.getEvidenciaRef()) ? requisito
-                : new RequisitoClassificado(requisito.getDescricao(), requisito.getClassificacao(), normalizada);
+                : requisito.comEvidencia(normalizada);
     }
 
     /**

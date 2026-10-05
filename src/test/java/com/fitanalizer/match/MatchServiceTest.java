@@ -209,6 +209,63 @@ class MatchServiceTest {
         assertThat(matchResult.isRevisar()).isFalse();
     }
 
+    private RequisitoClassificado forteJava(String descricao) {
+        return new RequisitoClassificado(descricao, Classificacao.FORTE, "skill:Java");
+    }
+
+    @Test
+    void anosAbaixoDoMinimoRebaixaAplicaTetoERevisar() {
+        // Profile tem Java 5 anos; vaga exige 8. A Claude disse PARCIAL, o código rebaixa.
+        Profile profile = perfilComSkillTech();
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(matchResultRepository.findByProfileAndVagaChave(any(), any())).thenReturn(Optional.empty());
+        RequisitoClassificado anos = new RequisitoClassificado("8+ anos de Java", Classificacao.PARCIAL, "skill:java",
+                true, "java", 8, false);
+        when(fitAnalysisClient.analisar(any())).thenReturn(new FitAnalysisResult(Frente.TECH,
+                List.of(anos, forteJava("A"), forteJava("B"), forteJava("C"), forteJava("D")), List.of()));
+
+        MatchResult matchResult = service.analisar("everson", "vaga", Frente.TECH, null, false).matchResult();
+
+        assertThat(matchResult.getRequisitos().get(0).getClassificacao()).isEqualTo(Classificacao.NENHUM);
+        assertThat(matchResult.getAderenciaPct()).isEqualTo(80); // sozinho daria cv_carta
+        assertThat(matchResult.getDecisao()).isEqualTo(Decisao.NAO_CANDIDATAR);
+        assertThat(matchResult.isRevisar()).isTrue();
+    }
+
+    @Test
+    void anosSuficientesNaoRebaixamNemLimitam() {
+        Profile profile = perfilComSkillTech();
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(matchResultRepository.findByProfileAndVagaChave(any(), any())).thenReturn(Optional.empty());
+        RequisitoClassificado anos = new RequisitoClassificado("3+ anos de Java", Classificacao.FORTE, "skill:Java",
+                true, "Java", 3, false);
+        when(fitAnalysisClient.analisar(any()))
+                .thenReturn(new FitAnalysisResult(Frente.TECH, List.of(anos), List.of()));
+
+        MatchResult matchResult = service.analisar("everson", "vaga", Frente.TECH, null, false).matchResult();
+
+        assertThat(matchResult.getRequisitos().get(0).getClassificacao()).isEqualTo(Classificacao.FORTE);
+        assertThat(matchResult.getDecisao()).isEqualTo(Decisao.CV_PRIORITARIO);
+        assertThat(matchResult.isRevisar()).isFalse();
+    }
+
+    @Test
+    void formacaoSemEvidenciaRevisarSemLimitarDecisao() {
+        Profile profile = perfilComSkillTech();
+        when(profileRepository.findByOwner("everson")).thenReturn(Optional.of(profile));
+        when(matchResultRepository.findByProfileAndVagaChave(any(), any())).thenReturn(Optional.empty());
+        RequisitoClassificado formacao = new RequisitoClassificado("Formação superior", Classificacao.NENHUM, null,
+                false, null, null, true);
+        when(fitAnalysisClient.analisar(any())).thenReturn(new FitAnalysisResult(Frente.TECH,
+                List.of(formacao, forteJava("A"), forteJava("B"), forteJava("C"), forteJava("D")), List.of()));
+
+        MatchResult matchResult = service.analisar("everson", "vaga", Frente.TECH, null, false).matchResult();
+
+        assertThat(matchResult.getAderenciaPct()).isEqualTo(80);
+        assertThat(matchResult.getDecisao()).isEqualTo(Decisao.CV_CARTA);
+        assertThat(matchResult.isRevisar()).isTrue();
+    }
+
     @Test
     void frenteDetectadaDivergenteMarcaRevisar() {
         Profile profile = perfilComSkillTech();

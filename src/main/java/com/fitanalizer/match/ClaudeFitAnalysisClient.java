@@ -116,6 +116,31 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
 
                 Requisitos desejáveis (não obrigatórios) não entram na lista.
 
+                Uma linha da vaga é UM requisito. Não divida listas separadas por
+                vírgula, barra ou "e" em vários requisitos. Exemplo: a linha
+                "Domínio de Bases de dados: SQL, Postgres, MySQL, MongoDB" é UM
+                requisito (não quatro), e "Confortável com o Inglês e Português" é
+                UM requisito (não dois). Classifique a linha inteira pela cobertura
+                do conjunto e cite a evidência mais forte.
+
+                Campos de cada requisito, além da classificação:
+                - eliminatorio: true SOMENTE quando a vaga exige um mínimo de anos de
+                  uma tecnologia ou uma senioridade explícita (ex: "Sênior",
+                  "nível pleno"). Formação, nível de idioma e disponibilidade ou
+                  localização NÃO são eliminatórios.
+                - tecnologia e anosMinimos: preencha quando a vaga exige um mínimo de
+                  anos de uma tecnologia. "superior a 3 anos" ou "3+ anos" = 3. Se a
+                  linha cita várias tecnologias ("superior a 3 anos em Java8+,
+                  Springboot, Kafka"), use a principal (a primeira). Em
+                  tecnologia, use o nome exato da skill do perfil quando ela existir
+                  (ex: "Java" para "Java8+"); senão, o nome que a vaga usa. Não
+                  compare você os anos: classifique normalmente; o código confere.
+                - foraDoPerfil: true para requisitos que o perfil não tem como
+                  comprovar: formação acadêmica, disponibilidade, regime de trabalho
+                  ou localização. Também para nível de idioma, se nenhuma skill do
+                  perfil cobrir o idioma. Se não houver evidência, classifique
+                  "nenhum" e registre em gapsRiscos.
+
                 Classifique também a frente da vaga (COMEX ou TECH) a partir do
                 próprio texto, em frenteDetectada.
 
@@ -134,11 +159,15 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
         propriedadesRequisito.put("classificacao",
                 Map.of("type", "string", "enum", List.of("forte", "parcial", "nenhum")));
         propriedadesRequisito.put("evidenciaRef", Map.of("type", List.of("string", "null")));
+        propriedadesRequisito.put("eliminatorio", Map.of("type", "boolean"));
+        propriedadesRequisito.put("tecnologia", Map.of("type", List.of("string", "null")));
+        propriedadesRequisito.put("anosMinimos", Map.of("type", List.of("integer", "null")));
+        propriedadesRequisito.put("foraDoPerfil", Map.of("type", "boolean"));
 
         Map<String, Object> schemaRequisito = Map.of(
                 "type", "object",
                 "properties", propriedadesRequisito,
-                "required", List.of("descricao", "classificacao"));
+                "required", List.of("descricao", "classificacao", "eliminatorio", "foraDoPerfil"));
 
         Map<String, Object> schemaGapRisco = Map.of(
                 "type", "object",
@@ -194,8 +223,10 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                 throw new IllegalStateException("A conversão da entrada da ferramenta devolveu null");
             }
             List<RequisitoClassificado> requisitos = resposta.requisitos().stream()
-                    .map(r -> new RequisitoClassificado(r.descricao(), Classificacao.valueOf(r.classificacao().toUpperCase()),
-                            r.evidenciaRef()))
+                    .map(r -> new RequisitoClassificado(r.descricao(),
+                            Classificacao.valueOf(r.classificacao().toUpperCase()), r.evidenciaRef(),
+                            Boolean.TRUE.equals(r.eliminatorio()), r.tecnologia(), r.anosMinimos(),
+                            Boolean.TRUE.equals(r.foraDoPerfil())))
                     .toList();
             List<GapRisco> gapsRiscos = resposta.gapsRiscos().stream()
                     .map(g -> new GapRisco(g.gap(), g.risco()))
@@ -212,7 +243,9 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
     record ClaudeToolResponse(String frenteDetectada, List<RequisitoDto> requisitos,
             List<GapRiscoDto> gapsRiscos) {
 
-        record RequisitoDto(String descricao, String classificacao, String evidenciaRef) {
+        // Campos da v3 como wrappers: ausentes na resposta viram null (= false / sem mínimo).
+        record RequisitoDto(String descricao, String classificacao, String evidenciaRef, Boolean eliminatorio,
+                String tecnologia, Integer anosMinimos, Boolean foraDoPerfil) {
         }
 
         record GapRiscoDto(String gap, String risco) {
