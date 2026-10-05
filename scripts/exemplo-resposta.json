@@ -1,0 +1,20 @@
+{
+  "id": 1,
+  "frente": "TECH",
+  "vagaUrl": "https://exemplo.com/vaga-ficticia",
+  "aderenciaPct": 58,
+  "requisitos": [
+    { "descricao": "Java", "classificacao": "FORTE", "evidenciaRef": "skill:Java", "eliminatorio": false, "tecnologia": null, "anosMinimos": null, "foraDoPerfil": false },
+    { "descricao": "3+ anos de Spring Boot", "classificacao": "PARCIAL", "evidenciaRef": "exp:1", "eliminatorio": true, "tecnologia": "Spring Boot", "anosMinimos": 3, "foraDoPerfil": false },
+    { "descricao": "Kafka", "classificacao": "NENHUM", "evidenciaRef": null, "eliminatorio": false, "tecnologia": null, "anosMinimos": null, "foraDoPerfil": false },
+    { "descricao": "Licenciatura em Informática", "classificacao": "NENHUM", "evidenciaRef": null, "eliminatorio": false, "tecnologia": null, "anosMinimos": null, "foraDoPerfil": true }
+  ],
+  "gapsRiscos": [
+    { "gap": "Sem experiência com Kafka", "risco": "Mensageria é central na vaga, \"bloqueante\" em entrevista técnica, provável" }
+  ],
+  "decisao": "CV_CARTA_COM_AVISO",
+  "revisar": true,
+  "versaoPrompt": "v4",
+  "modelo": "claude-haiku-4-5",
+  "analisadoEm": "2026-10-05T10:00:00Z"
+}

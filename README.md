@@ -112,6 +112,34 @@ Com Docker Engine 29 ou mais novo, é preciso o Testcontainers 2.x, que o
 O GitHub Actions (`.github/workflows/ci.yml`) roda `./mvnw test` em todo PR e
 em todo push para `main`.
 
+## Analisar vagas reais
+
+Com a aplicação rodando (`./mvnw spring-boot:run`) e o Profile cadastrado:
+
+```bash
+# Decida ANTES de rodar: a sua nota é obrigatória e o script recusa rodar sem ela.
+scripts/analisar-vaga.sh ~/vagas/acme-backend.txt https://exemplo.com/vagas/123 cv_carta
+scripts/analisar-vaga.sh ~/vagas/beta.txt beta-dev-java-2026-10 nao_candidatar COMEX
+
+# Backup do Profile (opcional)
+scripts/backup-profile.sh
+```
+
+- **Nota:** `cv_prioritario`, `cv_carta`, `cv_carta_com_aviso`,
+  `nao_candidatar` ou `fora_escopo`. Registar a sua decisão antes de ver a do
+  sistema é o que permite medir depois se ele acerta. Quando o sistema discorda,
+  o script avisa a distância em faixas.
+- **Padrões:** frente `TECH`, `OWNER=everson`, `API_URL=http://localhost:8080`.
+- **Fora do repositório:** o histórico vai para `~/fit-analises.csv` (a coluna
+  `mudei_de_ideia` fica para preencher à mão) e o backup para
+  `~/fit-profile-backup-AAAA-MM-DD.json`. O texto da vaga nunca é impresso nem
+  gravado.
+- **Custo:** cada análise nova chama a Claude e gasta crédito (HTTP 201).
+  Repetir o mesmo `vagaUrl` devolve o resultado salvo, sem custo (HTTP 200),
+  exceto depois de uma mudança de `prompt-version`, que reanalisa uma vez. Use
+  sempre o mesmo `vagaUrl`/id para a mesma vaga.
+- Requer `curl` e `jq`.
+
 ## Conjunto de regressão do prompt (gasta crédito)
 
 Teste manual que manda vagas reais, julgadas à mão, para a Claude API de
