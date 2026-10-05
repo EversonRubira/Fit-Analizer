@@ -1,7 +1,7 @@
 <!-- Keep in sync with README.md: any change goes to both versions in the same PR. -->
 # Fit Analizer
 
-**🇵🇹 Versão em português: [README.md](README.md)**
+** Versão em português: [README.md](README.md)**
 
 Fit analyzer between job postings and a structured professional profile. It takes the text of a job posting, compares it against the Profile (skills and experience) and returns a fit percentage, the classified mandatory requirements, the risks and a decision (apply or not).
 
