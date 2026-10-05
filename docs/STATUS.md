@@ -1,6 +1,6 @@
 # Status do projeto — Fit Analizer
 
-**Atualizado em:** 2026-10-02
+**Atualizado em:** 2026-10-05
 
 ## Visão geral
 
@@ -407,6 +407,27 @@ mudança de `prompt-version` reanalisa (e cobra) cada vaga reenviada uma vez.
   pasta no `.gitignore`, com o `RegressaoPromptTest` caindo para os exemplos
   versionados quando ela não existir (hoje as reais sobrescrevem os exemplos
   no working tree e aparecem como modificadas no `git status`).
+
+**Eliminatórios e anos mínimos (2026-10-05, PR #29; detalhe no PRD da F02,
+seção 11).**
+- **Causa raiz (vaga-05, 70% / `cv_carta`, esperado `nao_candidatar`):**
+  (1) denominador inflado: listas da vaga viravam vários requisitos ("SQL,
+  Postgres, MySQL, MongoDB" virou vários FORTE, "Inglês e Português" virou
+  2; 12 requisitos, 8 FORTE); (2) eliminatórios pesando igual a Git: "3+
+  anos de Java" com 1 ano no Profile ficou PARCIAL e não limitava a decisão.
+- **Regra:** uma linha da vaga = um requisito. O teto `nao_candidatar` vale
+  **só** para requisito com `anosMinimos` que termina NENHUM (o
+  `VerificadorAnosMinimos` compara com a skill do Profile em código).
+  Formação, nível de idioma e disponibilidade/localização não são
+  eliminatórios: NENHUM só liga `revisar` e vai para `gapsRiscos`. Campo de
+  formação no Profile **descartado de propósito**: esperar fricção real antes
+  de modelar.
+- **Custo:** `prompt-version` v2 → v3, então cada vaga reenviada é
+  reanalisada (e cobrada) uma vez.
+- **Limitação conhecida:** "Senior" sem número de anos fica `eliminatorio`
+  mas **não** aciona o teto (não há com o que comparar no Profile).
+- **Pendente:** rodar a regressão paga com o prompt v3 (não rodada no PR;
+  `mvn test`: 91 passando).
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.

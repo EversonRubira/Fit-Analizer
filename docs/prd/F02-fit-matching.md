@@ -544,3 +544,39 @@ graph LR
   a regressão validar a regra.
 - **Próximo passo:** diagnóstico com `-Dregressao.casos=vaga-01` e depois
   `vaga-05`.
+
+## 11. Decisões de 2026-10-05
+
+Resolve a hipótese em aberto da seção 10 para a vaga-05 (PR #29).
+
+**Causa raiz (vaga-05: 70%, `cv_carta`; esperado `nao_candidatar`).**
+- **Denominador inflado:** listas da vaga viravam vários requisitos. "SQL,
+  Postgres, MySQL, MongoDB" virou vários itens FORTE e "Inglês e Português"
+  virou 2 — 12 requisitos no total, 8 deles FORTE.
+- **Eliminatórios pesando igual aos demais:** "3+ anos de Java" com 1 ano no
+  Profile ficou PARCIAL e pesou o mesmo que "Git"; nada limitava a decisão.
+
+**Regra.**
+- Uma linha da vaga = um requisito; listas não são divididas.
+- A Claude só extrai `tecnologia` e `anosMinimos`; a comparação com
+  `anosExperiencia` da skill do Profile é feita em código
+  (`VerificadorAnosMinimos`). Abaixo do mínimo ou skill ausente → NENHUM,
+  com `revisar=true`.
+- **Teto `nao_candidatar` só para requisitos com `anosMinimos`** que terminam
+  NENHUM (`Decisao.aplicarTeto`, regra única). O teto nunca melhora a decisão.
+- **Formação, nível de idioma e disponibilidade/localização não são
+  eliminatórios:** quando ficam NENHUM, só ligam `revisar` (e entram em
+  `gapsRiscos`), sem limitar a decisão.
+- **Campo de formação no Profile: descartado de propósito.** Só será modelado
+  se a falta dele virar fricção real.
+
+**Custo.** `prompt-version` v2 → v3: pela regra de dedup da seção 10, cada
+vaga reenviada é reanalisada (e cobrada) uma vez.
+
+**Limitação conhecida.** Senioridade sem número de anos ("Senior") fica
+marcada `eliminatorio`, mas **não** aciona o teto: não há dado no Profile
+para comparar. Uma vaga "Senior" sem anos explícitos pode continuar acima de
+`nao_candidatar`.
+
+**Pendente.** Rodar a regressão contra a API real com o prompt v3 (não rodada
+no PR #29). A vaga-01 (requisitos de atitude) continua sem diagnóstico.
