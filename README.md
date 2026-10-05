@@ -1,4 +1,7 @@
+<!-- Manter em sincronia com README.en.md: qualquer mudança aqui vai para as duas versões no mesmo PR. -->
 # Fit Analizer
+
+**🇬🇧 English version: [README.en.md](README.en.md)**
 
 Analisador de aderência entre vagas de emprego e um perfil profissional estruturado. Recebe o texto de uma vaga, compara-o com o Profile (competências e experiências) e devolve uma percentagem de aderência, os requisitos obrigatórios classificados, os riscos e uma decisão (candidatar ou não).
 
