@@ -20,7 +20,8 @@ import java.util.Objects;
  * senioridade explícita.</li>
  * <li>{@code tecnologia} + {@code anosMinimos}: o mínimo de anos, comparado em
  * código com a skill do Profile ({@link VerificadorAnosMinimos}). Só requisito
- * com {@code anosMinimos} pode limitar a decisão ({@link Decisao#aplicarTeto}).</li>
+ * {@code eliminatorio} com {@code anosMinimos} é verificado e pode limitar a
+ * decisão ({@link Decisao#aplicarTeto}).</li>
  * <li>{@code foraDoPerfil}: requisito que o Profile não tem como comprovar
  * (formação, nível de idioma, disponibilidade/localização). Não é
  * eliminatório; se ficar NENHUM, só liga {@code revisar}.</li>

@@ -131,4 +131,50 @@ class VerificadorEvidenciaTest {
         assertThat(verificado.getClassificacao()).isEqualTo(Classificacao.FORTE);
         assertThat(verificado.getEvidenciaRef()).isEqualTo("skill:Java");
     }
+
+    // --- Lista separada por vírgula (prompt v3 devolvia "skill:Docker, exp:1") ---
+
+    @Test
+    void listaComTodosOsTokensValidosMantemEGravaListaNormalizada() {
+        // Por quê: todos os tokens existem no perfil, então a classificação se mantém;
+        // grava sem colchetes e com separador padronizado.
+        RequisitoClassificado requisito = new RequisitoClassificado("Java", Classificacao.FORTE,
+                "skill:Java,[exp:2] ");
+
+        RequisitoClassificado verificado = VerificadorEvidencia.verificar(requisito, skills,
+                List.of(experienciaComId(2L)));
+
+        assertThat(verificado.getClassificacao()).isEqualTo(Classificacao.FORTE);
+        assertThat(verificado.getEvidenciaRef()).isEqualTo("skill:Java, exp:2");
+    }
+
+    @Test
+    void listaComUmTokenInvalidoRebaixaEApontaQual() {
+        // Por quê: caso real do v3 — um token inventado no meio de um real não pode
+        // passar; e o log precisa dizer qual foi.
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(1L));
+        RequisitoClassificado requisito = new RequisitoClassificado("Docker", Classificacao.PARCIAL,
+                "skill:Docker, exp:1");
+
+        assertThat(VerificadorEvidencia.verificar(requisito, skills, experiencias).getClassificacao())
+                .isEqualTo(Classificacao.NENHUM);
+        assertThat(VerificadorEvidencia.tokensInvalidos("skill:Docker, exp:1", skills, experiencias))
+                .containsExactly("skill:Docker");
+    }
+
+    @Test
+    void listaComColchetesEmCadaTokenEValida() {
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(2L));
+
+        assertThat(VerificadorEvidencia.referenciaValida("[skill:Java], [exp:2]", skills, experiencias)).isTrue();
+    }
+
+    @Test
+    void listaContinuaEstritaNoFormato() {
+        // Colchetes valem por token, não em volta da lista inteira; token vazio é inválido.
+        List<ExperienciaProfissional> experiencias = List.of(experienciaComId(2L));
+        assertThat(VerificadorEvidencia.referenciaValida("[skill:Java, exp:2]", skills, experiencias)).isFalse();
+        assertThat(VerificadorEvidencia.referenciaValida("skill:Java,", skills, experiencias)).isFalse();
+        assertThat(VerificadorEvidencia.referenciaValida("skill:Java; exp:2", skills, experiencias)).isFalse();
+    }
 }

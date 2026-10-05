@@ -220,8 +220,10 @@ public class MatchService {
         RequisitoClassificado verificado = VerificadorEvidencia.verificar(requisito, skills, experiencias);
         if (verificado.getClassificacao() != requisito.getClassificacao()) {
             houveRebaixamento.set(true);
-            log.warn("Alucinação detectada — owner={} vagaChave={} requisito=\"{}\" evidenciaRef={}", owner,
-                    vagaChave, requisito.getDescricao(), requisito.getEvidenciaRef());
+            // tokensInvalidos: numa lista "skill:Docker, exp:1", diz qual token derrubou.
+            log.warn("Alucinação detectada — owner={} vagaChave={} requisito=\"{}\" evidenciaRef={}"
+                    + " tokensInvalidos={}", owner, vagaChave, requisito.getDescricao(), requisito.getEvidenciaRef(),
+                    VerificadorEvidencia.tokensInvalidos(requisito.getEvidenciaRef(), skills, experiencias));
         }
         return verificado;
     }

@@ -39,8 +39,10 @@ public enum Decisao {
      * verificações em código), a decisão não passa de {@link #NAO_CANDIDATAR}:
      * o percentual sozinho deixaria "3+ anos de Java" pesar igual a "Git".
      *
-     * <p>Só {@code anosMinimos} aciona o teto, por ser o único eliminatório
-     * comparável com o Profile. Formação, idioma e disponibilidade não são
+     * <p>Só requisito {@code eliminatorio} com {@code anosMinimos} aciona o
+     * teto, por ser o único eliminatório comparável com o Profile. Exigir
+     * {@code eliminatorio} (desde o prompt v4) impede que um {@code anosMinimos}
+     * espúrio, copiado do Profile num requisito comum, derrube a vaga. Formação, idioma e disponibilidade não são
      * eliminatórios ({@code foraDoPerfil}); senioridade sem número de anos
      * fica {@code eliminatorio} mas sem teto. Nunca melhora a decisão:
      * {@link #FORA_ESCOPO} continua {@link #FORA_ESCOPO}.
@@ -53,6 +55,7 @@ public enum Decisao {
 
     static boolean temEliminatorioNaoAtendido(List<RequisitoClassificado> requisitosVerificados) {
         return requisitosVerificados.stream()
-                .anyMatch(req -> req.getAnosMinimos() != null && req.getClassificacao() == Classificacao.NENHUM);
+                .anyMatch(req -> req.isEliminatorio() && req.getAnosMinimos() != null
+                        && req.getClassificacao() == Classificacao.NENHUM);
     }
 }

@@ -79,4 +79,14 @@ class VerificadorAnosMinimosTest {
 
         assertThat(VerificadorAnosMinimos.verificar(requisito, skills)).isSameAs(requisito);
     }
+
+    @Test
+    void anosMinimosEmRequisitoNaoEliminatorioEIgnorado() {
+        // Por quê: caso real do v3 — "Domínio de Python" veio com anosMinimos=2 copiado do
+        // Profile, sem a vaga pedir mínimo. Sem eliminatorio, não há mínimo a conferir.
+        RequisitoClassificado requisito = new RequisitoClassificado("Domínio de Python", Classificacao.PARCIAL,
+                "skill:Java", false, "Python", 2, false);
+
+        assertThat(VerificadorAnosMinimos.verificar(requisito, skills)).isSameAs(requisito);
+    }
 }

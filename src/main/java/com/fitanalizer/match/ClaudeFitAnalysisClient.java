@@ -110,28 +110,33 @@ public class ClaudeFitAnalysisClient implements FitAnalysisClient {
                 "forte" ou "parcial", cite em evidenciaRef o token EXATO do item do
                 perfil abaixo que sustenta a classificação — nunca reescreva o nome.
                 O token vai SEM os colchetes: escreva exp:2 ou skill:Java, nunca
-                [exp:2] ou [skill:Java].
+                [exp:2] ou [skill:Java]. Cite UM token por requisito, o que mais
+                sustenta a classificação; nunca uma lista ("skill:Docker, exp:1").
                 Se não houver evidência real no perfil, classifique "nenhum" e deixe
                 evidenciaRef vazio.
 
                 Requisitos desejáveis (não obrigatórios) não entram na lista.
 
-                Uma linha da vaga é UM requisito. Não divida listas separadas por
-                vírgula, barra ou "e" em vários requisitos. Exemplo: a linha
-                "Domínio de Bases de dados: SQL, Postgres, MySQL, MongoDB" é UM
-                requisito (não quatro), e "Confortável com o Inglês e Português" é
-                UM requisito (não dois). Classifique a linha inteira pela cobertura
-                do conjunto e cite a evidência mais forte.
+                Cada tecnologia ou competência distinta citada numa lista vira um
+                requisito próprio, para que cada lacuna apareça separada. Exemplo:
+                "Experiência com Java, Spring Boot, Kafka" são TRÊS requisitos
+                (Java; Spring Boot; Kafka), e não um requisito classificado só pelo
+                Java. Não duplique: o mesmo requisito, repetido em dois itens da
+                vaga, entra uma vez só.
 
                 Campos de cada requisito, além da classificação:
                 - eliminatorio: true SOMENTE quando a vaga exige um mínimo de anos de
                   uma tecnologia ou uma senioridade explícita (ex: "Sênior",
                   "nível pleno"). Formação, nível de idioma e disponibilidade ou
                   localização NÃO são eliminatórios.
-                - tecnologia e anosMinimos: preencha quando a vaga exige um mínimo de
-                  anos de uma tecnologia. "superior a 3 anos" ou "3+ anos" = 3. Se a
-                  linha cita várias tecnologias ("superior a 3 anos em Java8+,
-                  Springboot, Kafka"), use a principal (a primeira). Em
+                - tecnologia e anosMinimos: preencha SOMENTE quando o texto da vaga
+                  declara um número de anos explícito para aquela tecnologia; senão,
+                  deixe os dois vazios. NUNCA copie os anos do perfil para
+                  anosMinimos: "Domínio de Python" não pede mínimo, então
+                  anosMinimos fica vazio. "superior a 3 anos" ou "3+ anos" = 3. Se o
+                  mínimo vale para uma lista ("superior a 3 anos em Java8+,
+                  Springboot, Kafka"), separe os requisitos como acima e preencha
+                  tecnologia e anosMinimos só no da principal (a primeira). Em
                   tecnologia, use o nome exato da skill do perfil quando ela existir
                   (ex: "Java" para "Java8+"); senão, o nome que a vaga usa. Não
                   compare você os anos: classifique normalmente; o código confere.

@@ -72,4 +72,14 @@ class DecisaoTest {
 
         assertThat(Decisao.aplicarTeto(Decisao.CV_CARTA, List.of(senior))).isEqualTo(Decisao.CV_CARTA);
     }
+
+    @Test
+    void anosMinimosSemEliminatorioNaoAcionaOTeto() {
+        // Por quê: anosMinimos espúrio (copiado do Profile) num requisito comum que ficou
+        // NENHUM por outro motivo não pode derrubar a vaga para nao_candidatar.
+        RequisitoClassificado comum = new RequisitoClassificado("Domínio de Python", Classificacao.NENHUM, null,
+                false, "Python", 2, false);
+
+        assertThat(Decisao.aplicarTeto(Decisao.CV_CARTA, List.of(comum, forte("Git")))).isEqualTo(Decisao.CV_CARTA);
+    }
 }

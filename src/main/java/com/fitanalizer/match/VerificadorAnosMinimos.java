@@ -21,7 +21,11 @@ public final class VerificadorAnosMinimos {
     }
 
     /**
-     * Sem {@code anosMinimos}: nada a verificar. Com ele, localiza a skill
+     * Só age em requisito {@code eliminatorio}: o prompt v3 às vezes preenchia
+     * {@code anosMinimos} com os anos do Profile em requisitos que não pedem
+     * mínimo nenhum ("Domínio de Python" → 2), e isso rebaixava à toa.
+     *
+     * <p>Sem {@code anosMinimos}: nada a verificar. Com ele, localiza a skill
      * pelo nome ({@link Skill#temNome}: ignora maiúsculas e espaços nas pontas,
      * sem substring) e rebaixa para NENHUM se a skill não existir ou tiver
      * menos anos que o mínimo — mesmo que a Claude tenha dito FORTE ou PARCIAL.
@@ -29,7 +33,8 @@ public final class VerificadorAnosMinimos {
      * <p>{@code skills} já deve vir filtrado pela frente da vaga (+ TRANSVERSAL).
      */
     public static RequisitoClassificado verificar(RequisitoClassificado requisito, List<Skill> skills) {
-        if (requisito.getAnosMinimos() == null || requisito.getClassificacao() == Classificacao.NENHUM) {
+        if (!requisito.isEliminatorio() || requisito.getAnosMinimos() == null
+                || requisito.getClassificacao() == Classificacao.NENHUM) {
             return requisito;
         }
         boolean atende = skills.stream()

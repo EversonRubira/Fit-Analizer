@@ -2,6 +2,7 @@ package com.fitanalizer.match;
 
 import com.fitanalizer.profile.ExperienciaProfissional;
 import com.fitanalizer.profile.Skill;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,7 +13,9 @@ import java.util.Optional;
  * instrui a Claude a citar sempre um token exato ({@code skill:<nome>} ou
  * {@code exp:<id>}), então esta classe só verifica pertencimento a um
  * conjunto conhecido — nada de fuzzy match ou normalização própria além da
- * já usada em {@link Skill#temNome}.
+ * já usada em {@link Skill#temNome}. Aceita uma lista separada por vírgula
+ * (válida só se todos os tokens forem); o prompt pede um token só, a lista é
+ * a rede de segurança.
  */
 public final class VerificadorEvidencia {
 
@@ -40,10 +43,26 @@ public final class VerificadorEvidencia {
         if (!referenciaValida(requisito.getEvidenciaRef(), skills, experiencias)) {
             return requisito.rebaixarParaNenhum();
         }
-        // Grava o token sem colchetes: é o formato que o resto do sistema espera.
-        String normalizada = normalizar(requisito.getEvidenciaRef());
+        // Grava os tokens sem colchetes, separados por ", ": é o formato que o
+        // resto do sistema espera.
+        String normalizada = String.join(", ", tokens(requisito.getEvidenciaRef()));
         return normalizada.equals(requisito.getEvidenciaRef()) ? requisito
                 : requisito.comEvidencia(normalizada);
+    }
+
+    /**
+     * Tokens da referência que NÃO existem no perfil (lista vazia = tudo
+     * válido). Para quem chama logar qual token derrubou o requisito; a regra
+     * de decisão continua em {@link #referenciaValida}.
+     */
+    public static List<String> tokensInvalidos(String evidenciaRef, List<Skill> skills,
+            List<ExperienciaProfissional> experiencias) {
+        if (evidenciaRef == null || evidenciaRef.isBlank()) {
+            return List.of(String.valueOf(evidenciaRef));
+        }
+        return tokens(evidenciaRef).stream()
+                .filter(token -> !tokenValido(token, skills, experiencias))
+                .toList();
     }
 
     /**
@@ -53,10 +72,22 @@ public final class VerificadorEvidencia {
      */
     public static boolean referenciaValida(String evidenciaRef, List<Skill> skills,
             List<ExperienciaProfissional> experiencias) {
-        if (evidenciaRef == null || evidenciaRef.isBlank()) {
-            return false;
-        }
-        evidenciaRef = normalizar(evidenciaRef);
+        // Lista separada por vírgula (prompt v3 devolvia "skill:Docker, exp:1"):
+        // válida só se TODOS os tokens forem. Um token ruim derruba o requisito
+        // inteiro — aceitar parte seria deixar a Claude "diluir" uma alucinação
+        // no meio de referências reais.
+        return tokensInvalidos(evidenciaRef, skills, experiencias).isEmpty();
+    }
+
+    /** Divide por vírgula e normaliza cada token (trim e colchetes). Token vazio é mantido — e é inválido. */
+    private static List<String> tokens(String evidenciaRef) {
+        return Arrays.stream(evidenciaRef.split(",", -1))
+                .map(VerificadorEvidencia::normalizar)
+                .toList();
+    }
+
+    private static boolean tokenValido(String evidenciaRef, List<Skill> skills,
+            List<ExperienciaProfissional> experiencias) {
         if (evidenciaRef.startsWith(PREFIXO_SKILL)) {
             String nome = evidenciaRef.substring(PREFIXO_SKILL.length());
             return skills.stream().anyMatch(skill -> skill.temNome(nome));

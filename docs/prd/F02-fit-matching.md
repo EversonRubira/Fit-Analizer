@@ -557,7 +557,8 @@ Resolve a hipótese em aberto da seção 10 para a vaga-05 (PR #29).
   Profile ficou PARCIAL e pesou o mesmo que "Git"; nada limitava a decisão.
 
 **Regra.**
-- Uma linha da vaga = um requisito; listas não são divididas.
+- ~~Uma linha da vaga = um requisito; listas não são divididas.~~ Substituída
+  no prompt v4 (ver abaixo).
 - A Claude só extrai `tecnologia` e `anosMinimos`; a comparação com
   `anosExperiencia` da skill do Profile é feita em código
   (`VerificadorAnosMinimos`). Abaixo do mínimo ou skill ausente → NENHUM,
@@ -578,5 +579,37 @@ marcada `eliminatorio`, mas **não** aciona o teto: não há dado no Profile
 para comparar. Uma vaga "Senior" sem anos explícitos pode continuar acima de
 `nao_candidatar`.
 
-**Pendente.** Rodar a regressão contra a API real com o prompt v3 (não rodada
+**Prompt v4 (mesmo PR #29).** A rodada de regressão com o v3
+(`claude-haiku-4-5`) mostrou três problemas:
+1. **`evidenciaRef` em lista** ("skill:Docker, exp:1"): o verificador tratava a
+   string inteira como uma referência e rebaixava para NENHUM.
+2. **`anosMinimos` copiado do Profile** em requisitos sem mínimo nenhum
+   ("Domínio de Python" com `anosMinimos=2`).
+3. **"Uma linha, um requisito" escondia lacunas:** "Java8+, Springboot, Kafka,
+   etc" ficou PARCIAL só pelo Java; "APIs, microserviços, Git e CI/CD" ficou
+   FORTE só com REST APIs.
+
+O v4 corrige:
+- **Evidência:** o prompt pede um token por requisito (o mais forte). O
+  `VerificadorEvidencia` aceita lista separada por vírgula como rede de
+  segurança: mantém a classificação só se **todos** os tokens existirem no
+  Profile, grava a lista normalizada e loga os tokens inválidos. Fora isso,
+  continua estrito.
+- **Anos mínimos:** o prompt só preenche `anosMinimos` com número explícito
+  na vaga, nunca a partir do Profile. Em código, `VerificadorAnosMinimos` e o
+  teto (`Decisao.aplicarTeto`) só consideram requisito com `eliminatorio=true`.
+  **O teto por `anosMinimos` continua**, agora restrito a eliminatórios.
+- **Listas:** cada tecnologia ou competência distinta vira um requisito
+  próprio, sem duplicar o mesmo requisito em dois itens.
+
+**Risco a vigiar na regressão.** Separar listas é o oposto da regra do v3,
+criada contra o denominador inflado da vaga-05 ("SQL, Postgres, MySQL,
+MongoDB" virando vários FORTE). O teto por eliminatório é a proteção que
+existe hoje para esse caso; a vaga-05 precisa ser conferida na próxima rodada.
+Alternativas ("RabbitMQ ou Kafka") não estão tratadas no prompt.
+
+**Custo.** `prompt-version` v3 → v4: cada vaga reenviada é reanalisada (e
+cobrada) uma vez.
+
+**Pendente.** Rodar a regressão contra a API real com o prompt v4 (não rodada
 no PR #29). A vaga-01 (requisitos de atitude) continua sem diagnóstico.
