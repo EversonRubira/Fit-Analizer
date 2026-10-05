@@ -133,9 +133,12 @@ public class MatchService {
                 .analisar(new FitAnalysisRequest(textoVaga, preparo.skills(), preparo.experiencias()));
 
         AtomicBoolean houveRebaixamento = new AtomicBoolean(false);
+        AtomicBoolean anosInsuficientes = new AtomicBoolean(false);
         List<RequisitoClassificado> requisitosVerificados = resultadoClaude.requisitos().stream()
                 .map(requisito -> verificar(requisito, preparo.skills(), preparo.experiencias(), owner,
                         preparo.vagaChave(), houveRebaixamento))
+                .map(requisito -> verificarAnos(requisito, preparo.skills(), owner, preparo.vagaChave(),
+                        anosInsuficientes))
                 .toList();
 
         boolean inconclusiva = requisitosVerificados.isEmpty();
@@ -145,14 +148,20 @@ public class MatchService {
                 : resultadoClaude.gapsRiscos();
 
         int aderenciaPct = AderenciaCalculadora.aderenciaPct(requisitosVerificados);
-        Decisao decisao = Decisao.paraPct(aderenciaPct);
+        Decisao decisaoPorPct = Decisao.paraPct(aderenciaPct);
+        Decisao decisao = Decisao.aplicarTeto(decisaoPorPct, requisitosVerificados);
+        boolean tetoAplicado = decisao != decisaoPorPct;
+        // Formação, idioma, disponibilidade: o Profile não tem como comprovar.
+        // Não limitam a decisão, mas um humano precisa olhar.
+        boolean foraDoPerfilSemCobertura = requisitosVerificados.stream()
+                .anyMatch(req -> req.isForaDoPerfil() && req.getClassificacao() == Classificacao.NENHUM);
         boolean frenteDivergente = resultadoClaude.frenteDetectada() != frente;
-        boolean revisar = inconclusiva || houveRebaixamento.get() || frenteDivergente
-                || AderenciaCalculadora.zonaDeFronteira(aderenciaPct);
+        boolean revisar = inconclusiva || houveRebaixamento.get() || anosInsuficientes.get() || tetoAplicado
+                || foraDoPerfilSemCobertura || frenteDivergente || AderenciaCalculadora.zonaDeFronteira(aderenciaPct);
 
         if (revisar) {
-            logCausasRevisar(owner, preparo.vagaChave(), inconclusiva, houveRebaixamento.get(), frenteDivergente,
-                    aderenciaPct);
+            logCausasRevisar(owner, preparo.vagaChave(), new CausasRevisar(inconclusiva, houveRebaixamento.get(),
+                    anosInsuficientes.get(), tetoAplicado, foraDoPerfilSemCobertura, frenteDivergente), aderenciaPct);
         }
 
         return new Calculo(aderenciaPct, requisitosVerificados, gapsRiscos, decisao, revisar);
@@ -211,22 +220,50 @@ public class MatchService {
         RequisitoClassificado verificado = VerificadorEvidencia.verificar(requisito, skills, experiencias);
         if (verificado.getClassificacao() != requisito.getClassificacao()) {
             houveRebaixamento.set(true);
-            log.warn("Alucinação detectada — owner={} vagaChave={} requisito=\"{}\" evidenciaRef={}", owner,
-                    vagaChave, requisito.getDescricao(), requisito.getEvidenciaRef());
+            // tokensInvalidos: numa lista "skill:Docker, exp:1", diz qual token derrubou.
+            log.warn("Alucinação detectada — owner={} vagaChave={} requisito=\"{}\" evidenciaRef={}"
+                    + " tokensInvalidos={}", owner, vagaChave, requisito.getDescricao(), requisito.getEvidenciaRef(),
+                    VerificadorEvidencia.tokensInvalidos(requisito.getEvidenciaRef(), skills, experiencias));
         }
         return verificado;
     }
 
-    private void logCausasRevisar(String owner, String vagaChave, boolean inconclusiva, boolean houveRebaixamento,
-            boolean frenteDivergente, int aderenciaPct) {
+    private RequisitoClassificado verificarAnos(RequisitoClassificado requisito, List<Skill> skills, String owner,
+            String vagaChave, AtomicBoolean anosInsuficientes) {
+        // Regra no VerificadorAnosMinimos; aqui só log e flag, como em verificar().
+        RequisitoClassificado verificado = VerificadorAnosMinimos.verificar(requisito, skills);
+        if (verificado.getClassificacao() != requisito.getClassificacao()) {
+            anosInsuficientes.set(true);
+            log.warn("Anos abaixo do mínimo — owner={} vagaChave={} requisito=\"{}\" tecnologia={} anosMinimos={}"
+                    + " classificacaoClaude={}", owner, vagaChave, requisito.getDescricao(), requisito.getTecnologia(),
+                    requisito.getAnosMinimos(), requisito.getClassificacao());
+        }
+        return verificado;
+    }
+
+    /** Uma flag por causa possível de {@code revisar=true}, só para o log. */
+    private record CausasRevisar(boolean inconclusiva, boolean evidenciaRebaixada, boolean anosInsuficientes,
+            boolean tetoEliminatorio, boolean foraDoPerfil, boolean frenteDivergente) {
+    }
+
+    private void logCausasRevisar(String owner, String vagaChave, CausasRevisar flags, int aderenciaPct) {
         List<String> causas = new ArrayList<>();
-        if (inconclusiva) {
+        if (flags.inconclusiva()) {
             causas.add("inconclusiva");
         }
-        if (houveRebaixamento) {
+        if (flags.evidenciaRebaixada()) {
             causas.add("evidencia_rebaixada");
         }
-        if (frenteDivergente) {
+        if (flags.anosInsuficientes()) {
+            causas.add("anos_insuficientes");
+        }
+        if (flags.tetoEliminatorio()) {
+            causas.add("teto_eliminatorio");
+        }
+        if (flags.foraDoPerfil()) {
+            causas.add("fora_do_perfil");
+        }
+        if (flags.frenteDivergente()) {
             causas.add("frente_divergente");
         }
         if (AderenciaCalculadora.zonaDeFronteira(aderenciaPct)) {

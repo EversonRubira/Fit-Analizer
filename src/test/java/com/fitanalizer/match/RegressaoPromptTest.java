@@ -34,8 +34,8 @@ import org.springframework.test.util.ReflectionTestUtils;
  * {@link ClaudeFitAnalysisClient} direto, sem Spring, banco ou dedup. Como o
  * client devolve só os requisitos classificados (a decisão é calculada em
  * código, no {@link MatchService}), este teste aplica as mesmas funções puras
- * da produção — {@link VerificadorEvidencia}, {@link AderenciaCalculadora},
- * {@link Decisao#paraPct} — para chegar na mesma decisão que o endpoint daria.
+ * da produção — {@link VerificadorEvidencia}, {@link VerificadorAnosMinimos},
+ * {@link AderenciaCalculadora}, {@link Decisao#paraPct}, {@link Decisao#aplicarTeto} — para chegar na mesma decisão que o endpoint daria.
  *
  * <p>Frente: como no endpoint, o perfil é filtrado ANTES da chamada pela
  * frente informada (+ TRANSVERSAL), com os mesmos métodos do
@@ -116,6 +116,7 @@ class RegressaoPromptTest {
             // calcula o percentual e a faixa.
             List<RequisitoClassificado> verificados = resposta.requisitos().stream()
                     .map(req -> VerificadorEvidencia.verificar(req, skills, experiencias))
+                    .map(req -> VerificadorAnosMinimos.verificar(req, skills))
                     .toList();
             int aderenciaPct = AderenciaCalculadora.aderenciaPct(verificados);
             imprimirDiagnostico(caso, frente, skills.size(), experiencias.size(), resposta, verificados);
@@ -123,7 +124,7 @@ class RegressaoPromptTest {
                 avisos.add("%s: frente informada %s, detectada %s".formatted(caso, frente,
                         resposta.frenteDetectada()));
             }
-            Decisao decisaoObtida = Decisao.paraPct(aderenciaPct);
+            Decisao decisaoObtida = Decisao.aplicarTeto(Decisao.paraPct(aderenciaPct), verificados);
 
             int distancia = Math.abs(ORDEM.indexOf(decisaoObtida) - ORDEM.indexOf(decisaoEsperada));
             boolean passou = distancia <= DISTANCIA_MAXIMA;
@@ -189,8 +190,11 @@ class RegressaoPromptTest {
         for (int i = 0; i < resposta.requisitos().size(); i++) {
             RequisitoClassificado cru = resposta.requisitos().get(i);
             RequisitoClassificado ver = verificados.get(i);
-            System.out.println("  [%d] %s%n      crua=%s evidencia=%s -> verificada=%s".formatted(i + 1,
-                    cru.getDescricao(), cru.getClassificacao(), cru.getEvidenciaRef(), ver.getClassificacao()));
+            System.out.println("  [%d] %s%n      crua=%s evidencia=%s -> verificada=%s | eliminatorio=%s"
+                    .formatted(i + 1, cru.getDescricao(), cru.getClassificacao(), cru.getEvidenciaRef(),
+                            ver.getClassificacao(), cru.isEliminatorio())
+                    + " tecnologia=%s anosMinimos=%s foraDoPerfil=%s".formatted(cru.getTecnologia(),
+                            cru.getAnosMinimos(), cru.isForaDoPerfil()));
         }
         List<String> rejeitadas = new ArrayList<>();
         for (int i = 0; i < resposta.requisitos().size(); i++) {
@@ -198,7 +202,7 @@ class RegressaoPromptTest {
                 rejeitadas.add(String.valueOf(resposta.requisitos().get(i).getEvidenciaRef()));
             }
         }
-        System.out.println("rebaixados pelo VerificadorEvidencia: " + rejeitadas.size()
+        System.out.println("rebaixados (evidência ou anos): " + rejeitadas.size()
                 + " | evidências rejeitadas: " + rejeitadas);
         System.out.println("gapsRiscos: " + resposta.gapsRiscos().size());
         resposta.gapsRiscos().forEach(g -> System.out.println("  - " + g.getGap() + " | " + g.getRisco()));

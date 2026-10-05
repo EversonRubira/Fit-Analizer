@@ -18,7 +18,7 @@ fitanalizer:
     # Versão do CONTEÚDO do prompt (não do SDK/modelo) — persistida em
     # MatchResult.versaoPrompt, incrementar manualmente a cada mudança de
     # prompt (aciona o conjunto de regressão, PRD F02 seção 5).
-    prompt-version: v2
+    prompt-version: v4
     timeout-seconds: 60
   match:
     # Tamanho máximo do textoVaga em POST /matches (caracteres). Acima disso: 400,

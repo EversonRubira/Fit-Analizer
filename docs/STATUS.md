@@ -1,6 +1,6 @@
 # Status do projeto — Fit Analizer
 
-**Atualizado em:** 2026-10-02
+**Atualizado em:** 2026-10-05
 
 ## Visão geral
 
@@ -407,6 +407,43 @@ mudança de `prompt-version` reanalisa (e cobra) cada vaga reenviada uma vez.
   pasta no `.gitignore`, com o `RegressaoPromptTest` caindo para os exemplos
   versionados quando ela não existir (hoje as reais sobrescrevem os exemplos
   no working tree e aparecem como modificadas no `git status`).
+
+**Eliminatórios e anos mínimos (2026-10-05, PR #29; detalhe no PRD da F02,
+seção 11).**
+- **Causa raiz (vaga-05, 70% / `cv_carta`, esperado `nao_candidatar`):**
+  (1) denominador inflado: listas da vaga viravam vários requisitos ("SQL,
+  Postgres, MySQL, MongoDB" virou vários FORTE, "Inglês e Português" virou
+  2; 12 requisitos, 8 FORTE); (2) eliminatórios pesando igual a Git: "3+
+  anos de Java" com 1 ano no Profile ficou PARCIAL e não limitava a decisão.
+- **Regra:** ~~uma linha da vaga = um requisito~~ (substituída no v4, abaixo).
+  O teto `nao_candidatar` vale **só** para requisito com `anosMinimos` que
+  termina NENHUM (o
+  `VerificadorAnosMinimos` compara com a skill do Profile em código).
+  Formação, nível de idioma e disponibilidade/localização não são
+  eliminatórios: NENHUM só liga `revisar` e vai para `gapsRiscos`. Campo de
+  formação no Profile **descartado de propósito**: esperar fricção real antes
+  de modelar.
+- **Custo:** `prompt-version` v2 → v3, então cada vaga reenviada é
+  reanalisada (e cobrada) uma vez.
+- **Limitação conhecida:** "Senior" sem número de anos fica `eliminatorio`
+  mas **não** aciona o teto (não há com o que comparar no Profile).
+- **Prompt v4 (mesmo PR):** a regressão com o v3 (`claude-haiku-4-5`)
+  mostrou (1) `evidenciaRef` em lista ("skill:Docker, exp:1") rebaixada por
+  inteiro; (2) `anosMinimos` copiado do Profile em requisito sem mínimo
+  ("Domínio de Python" = 2); (3) "uma linha, um requisito" escondendo
+  lacunas ("Java8+, Springboot, Kafka, etc" PARCIAL só pelo Java). O v4
+  corrige: um token de evidência por requisito no prompt, com o
+  `VerificadorEvidencia` aceitando lista só se **todos** os tokens forem
+  válidos (rede de segurança, loga o inválido); `anosMinimos` só com número
+  explícito na vaga, e `VerificadorAnosMinimos` e o teto só agem com
+  `eliminatorio=true` — **o teto por `anosMinimos` continua**; cada
+  tecnologia distinta de uma lista vira um requisito, sem duplicar.
+- **Risco a vigiar:** separar listas é o oposto da regra do v3, criada contra
+  o denominador inflado da vaga-05. Conferir a vaga-05 na próxima rodada.
+- **Custo:** `prompt-version` v3 → v4, então cada vaga reenviada é
+  reanalisada (e cobrada) uma vez.
+- **Pendente:** rodar a regressão paga com o prompt v4 (não rodada no PR;
+  `mvn test`: 97 passando).
 
 **Recorte:** analisa uma vaga contra o Profile de um owner e persiste o
 `MatchResult`. Ranking e consulta ficam na F03.

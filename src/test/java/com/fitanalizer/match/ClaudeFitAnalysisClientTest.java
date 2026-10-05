@@ -36,6 +36,26 @@ class ClaudeFitAnalysisClientTest {
     }
 
     @Test
+    void converteCamposDeJulgamentoDaV3() {
+        Map<String, Object> anos = new java.util.HashMap<>(Map.of("descricao", "3+ anos de Java",
+                "classificacao", "parcial", "evidenciaRef", "skill:Java", "eliminatorio", true,
+                "tecnologia", "Java", "anosMinimos", 3, "foraDoPerfil", false));
+        Map<String, Object> formacao = Map.of("descricao", "Formação superior", "classificacao", "nenhum",
+                "eliminatorio", false, "foraDoPerfil", true);
+        JsonValue entrada = JsonValue.from(Map.of(
+                "frenteDetectada", "TECH",
+                "requisitos", List.of(anos, formacao),
+                "gapsRiscos", List.of()));
+
+        FitAnalysisResult resultado = ClaudeFitAnalysisClient.converter(entrada);
+
+        assertThat(resultado.requisitos()).containsExactly(
+                new RequisitoClassificado("3+ anos de Java", Classificacao.PARCIAL, "skill:Java", true, "Java", 3,
+                        false),
+                new RequisitoClassificado("Formação superior", Classificacao.NENHUM, null, false, null, null, true));
+    }
+
+    @Test
     void entradaComValorForaDoSchemaLancaFitAnalysisException() {
         // Por quê: frente inexistente não pode virar resultado; tem que virar o erro tratado (502 no Controller).
         JsonValue entrada = JsonValue.from(Map.of(
